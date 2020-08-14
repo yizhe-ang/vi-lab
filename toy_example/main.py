@@ -33,8 +33,6 @@ def main(cfg):
     if cfg["loss_args"]:
         loss_func = partial(loss_func, **cfg["loss_args"])
 
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
-
     for i in range(cfg["n_iter"]):
         optimizer.zero_grad()
 
