@@ -1,3 +1,7 @@
+toy_example/NOTES.md
+.vscode/
+wandb/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

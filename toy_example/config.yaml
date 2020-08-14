@@ -1,0 +1,17 @@
+name: lang_s50_t50
+seed: 0
+
+n_iter: 20_000
+
+p_dist: normal_dist
+q_model: NormalDist
+
+optimizer: SGD
+optimizer_args:
+  lr: 0.001
+
+loss: langevin_kl
+loss_args:
+  eta: 0.1
+  s: 50
+  t: 50
