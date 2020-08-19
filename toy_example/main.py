@@ -1,9 +1,11 @@
 """To solve the optimization problem KL(Q | P)
 using different gradient estimators"""
 
+from collections import deque
 from functools import partial
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.optim as optim
@@ -14,6 +16,7 @@ from torch.distributions.kl import kl_divergence
 import toy_example.losses as losses
 import toy_example.p_dists as p_dists
 import toy_example.q_models as q_models
+from toy_example.viz import plot_samples
 
 
 def main(cfg):
@@ -33,6 +36,10 @@ def main(cfg):
     if cfg["loss_args"]:
         loss_func = partial(loss_func, **cfg["loss_args"])
 
+    # Keep queue of samples for visualization
+    samples = deque()
+    fig, ax = plt.subplots(figsize=(10, 10))
+
     for i in range(cfg["n_iter"]):
         optimizer.zero_grad()
 
@@ -45,8 +52,16 @@ def main(cfg):
         # Log metrics
         with torch.no_grad():
             kl = kl_divergence(q_model.get_dist(), p_dist).mean().item()
-
             wandb.log({"kl_divergence": kl})
+
+            samples.append(q_model.prev_sample.numpy().copy())
+            if len(samples) > 1_000:
+                samples.popleft()
+
+            if (i + 1) % 1_000 == 0:
+                ax = plot_samples(np.stack(samples), p_dist, ax)
+                wandb.log({"samples": wandb.Image(ax)})
+                print("logged chart")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,26 @@
+name: vanilla_mnist
+seed: 0
+
+exp: Experiment
+
+max_epochs: 100
+
+datamodule: MNISTDataModule
+datamodule_args:
+  data_dir: data
+
+encoder: MNISTEncoder
+encoder_args:
+
+decoder: MNISTDecoder
+decoder_args:
+
+vae: VAE
+vae_args:
+
+loss: elbo_loss
+loss_args:
+
+optimizer: Adam
+optimizer_args:
+  lr: 0.001
