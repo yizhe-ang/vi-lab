@@ -13,10 +13,10 @@ import wandb
 import yaml
 from torch.distributions.kl import kl_divergence
 
-import toy_example.losses as losses
-import toy_example.p_dists as p_dists
-import toy_example.q_models as q_models
-from toy_example.viz import plot_samples
+import losses as losses
+import p_dists as p_dists
+import q_models as q_models
+from viz import plot_samples
 
 
 def main(cfg):
@@ -59,14 +59,15 @@ def main(cfg):
                 samples.popleft()
 
             if (i + 1) % 1_000 == 0:
-                ax = plot_samples(np.stack(samples), p_dist, ax)
-                wandb.log({"samples": wandb.Image(ax)})
+                #ax = plot_samples(np.stack(samples), p_dist, ax)
+                #wandb.log({"samples": wandb.Image(ax)})
                 print("logged chart")
+                print(q_model.loc, q_model.prec)
 
 
 if __name__ == "__main__":
     # Load config yaml file
-    config_path = Path("toy_example") / "config.yaml"
+    config_path =  Path("config.yaml")
     with config_path.open("r") as f:
         cfg = yaml.load(f)
 
