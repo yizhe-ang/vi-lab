@@ -1,13 +1,16 @@
+from typing import Tuple, Optional
+
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch
-from typing import Tuple
-from torch.distributions import Normal, Distribution, Optional
+from torch.distributions import Distribution, Normal
 
 
 class MNISTEncoder(nn.Module):
-    def __init__(self, z_dim=20, hidden_dim=400):
+    def __init__(self, z_dim, hidden_dim=400):
         super().__init__()
+
+        self.z_dim = z_dim
 
         self.fc1 = nn.Linear(784, hidden_dim)
 
@@ -41,7 +44,7 @@ class MNISTEncoder(nn.Module):
         self, x: torch.tensor, reparam=True
     ) -> Tuple[torch.tensor, torch.tensor, Optional[Distribution]]:
         """Forward pass through encoder, returning components required to compute
-        objective
+        loss functions
 
         Parameters
         ----------
@@ -53,7 +56,7 @@ class MNISTEncoder(nn.Module):
         Returns
         -------
         Tuple[torch.tensor, torch.tensor, Distribution]
-            [B,],       [B, Z],  Distribution
+            [B,],       [B, Z],  [B, Z]
             log q(z|x), samples, q(z|x)
         """
         z_loc, z_scale = self.encode(x)

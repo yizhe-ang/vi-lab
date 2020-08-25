@@ -1,8 +1,10 @@
-from base import Distribution, Proposal
-import torch
-from typing import Dict, Any
+from typing import Any, Dict
+
 import numpy as np
+import torch
 import torch.distributions as dist
+
+from src.base import Distribution, Proposal
 
 
 class MCMC:

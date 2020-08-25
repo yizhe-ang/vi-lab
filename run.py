@@ -7,8 +7,6 @@ from pytorch_lightning.loggers import WandbLogger
 
 import src.experiments as experiments
 
-# from pl_bolts.callbacks import LatentDimInterpolator, TensorboardGenerativeModelImageSampler
-
 
 def main(hparams):
     pl.seed_everything(hparams["seed"])
@@ -17,16 +15,11 @@ def main(hparams):
     wandb_logger = WandbLogger(name=hparams["name"], project="vae-expts",)
     wandb_logger.log_hyperparams(hparams)
 
-    # Init datamodule
-    datamodule = getattr(datamodules, hparams["datamodule"])(
-        **hparams["datamodule_args"]
-    )
+    # Init experiment
+    exp = getattr(experiments, hparams["experiment"])(hparams)
 
     # Init callbacks
     callbacks = None
-
-    # Init experiment
-    exp = getattr(experiments, hparams["experiment"])(hparams)
 
     # Init trainer
     trainer = pl.Trainer(
@@ -35,13 +28,13 @@ def main(hparams):
         callbacks=callbacks,
         early_stop_callback=False,
         fast_dev_run=True,
-        gpus=1,
+        # gpus=1,
         logger=wandb_logger,
         reload_dataloaders_every_epoch=False,
         weights_summary="full",
         max_epochs=hparams["max_epochs"],
-        datamodule=datamodule,
     )
+    trainer.fit(exp, exp.datamodule)
 
 
 if __name__ == "__main__":

@@ -17,7 +17,8 @@ def plot_distribution(
     xy = np.stack([x.reshape(-1), y.reshape(-1)], axis=1)
     z = (
         distribution.log_prob(torch.tensor(xy, dtype=torch.float32))
-        .sum(-1)
+        # HACK include for factorized gaussian
+        # .sum(-1)
         .numpy()
         .reshape(s)
     )
@@ -37,15 +38,9 @@ def plot_points(xs, ax, i=0, j=1, color=True):
 
 
 def plot_samples(samples, p_dist, ax):
-    # FIXME Determine bounds; hardcoding distribution values
-    min_1 = min(samples[:, 0].min(), 3)
-    max_1 = max(samples[:, 0].max(), 3)
-    min_2 = min(samples[:, 1].min(), 6)
-    max_2 = max(samples[:, 1].max(), 6)
-
     plot_distribution(
         p_dist,
-        bounds=((0, 6), (-8, 20)),
+        bounds=((-4, 7), (-5, 7)),  # HACK Hardcoded
         ax=ax,
         num=100,
         n_levels=100,

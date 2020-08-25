@@ -3,9 +3,9 @@
 - Decoder
 - Prior Dist
 """
-import torch.nn as nn
 import torch
-from torch.distributions import Normal, Distribution
+import torch.nn as nn
+from torch.distributions import Distribution, Normal
 
 
 class VAE(nn.Module):
@@ -14,6 +14,8 @@ class VAE(nn.Module):
 
         self.encoder = encoder
         self.decoder = decoder
+        # Infer z_dim
+        self.z_dim = self.encoder.z_dim
 
     def prior(self, z: torch.tensor) -> Distribution:
         """Assume prior is standard normal, p(z) ~ Normal(0, 1)
@@ -33,8 +35,31 @@ class VAE(nn.Module):
     def forward(self, x: torch.tensor):
         pass
 
-    def sample(self):
-        pass
+    @torch.no_grad()
+    def sample(self, num_samples: int, device: torch.device) -> torch.tensor:
+        """Generate samples from prior dist (gradient calcs disabled)
+
+        Parameters
+        ----------
+        num_samples : int
+        device : torch.device
+
+        Returns
+        -------
+        torch.tensor
+            [B, D], Generated samples
+        """
+        self.eval()
+
+        # Assume prior ~ N(0,1)
+        dim = (num_samples, self.z_dim)
+        z = torch.normal(mean=0.0, std=1.0, size=dim, device=device)
+
+        loc_img = self.decoder.decode(z)
+
+        self.train()
+
+        return loc_img
 
     def reconstruct(self):
         pass

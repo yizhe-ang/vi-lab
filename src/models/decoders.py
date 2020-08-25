@@ -5,8 +5,10 @@ from torch.distributions import Bernoulli
 
 
 class MNISTDecoder(nn.Module):
-    def __init__(self, z_dim=20, hidden_dim=400):
+    def __init__(self, z_dim, hidden_dim=400):
         super().__init__()
+
+        self.z_dim = z_dim
 
         self.fc1 = nn.Linear(z_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, 784)
@@ -27,7 +29,7 @@ class MNISTDecoder(nn.Module):
         hidden = F.relu(self.fc1(z))
 
         # Output is Bernoulli
-        loc_img = F.sigmoid(self.fc2(hidden))
+        loc_img = torch.sigmoid(self.fc2(hidden))
 
         return loc_img
 

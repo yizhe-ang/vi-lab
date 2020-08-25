@@ -15,7 +15,7 @@ from torch.distributions import kl_divergence, Normal
 def elbo_loss(vae, x):
     log_qz_x, z, qz_x = vae.encoder(x)
     pz = vae.prior(z)
-    log_pz = pz.log_prob(z)
+    log_pz = pz.log_prob(z).sum(-1)
 
     # Reconstruction term
     log_px_z = vae.decoder(x, z)
