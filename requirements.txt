@@ -3,3 +3,4 @@ numpy
 scipy
 pytorch-lightning
 wandb
+nflows
