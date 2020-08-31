@@ -7,19 +7,26 @@ from torchvision import transforms as transform_lib
 from torchvision.datasets import MNIST
 
 
+class IndexedMNIST(MNIST):
+    def __getitem__(self, index):
+        img, target = super().__getitem__(index)
+
+        return index, img, target
+
+
 class MNISTDataModule(LightningDataModule):
 
-    name = 'mnist'
+    name = "mnist"
 
     def __init__(
-            self,
-            data_dir: str,
-            val_split: int = 5000,
-            num_workers: int = 16,
-            normalize: bool = False,
-            seed: int = 42,
-            *args,
-            **kwargs,
+        self,
+        data_dir: str,
+        val_split: int = 5000,
+        num_workers: int = 16,
+        normalize: bool = False,
+        seed: int = 42,
+        *args,
+        **kwargs,
     ):
         """
         .. figure:: https://miro.medium.com/max/744/1*AO2rIhzRYzFVQlFLx9DM9A.png
@@ -52,6 +59,15 @@ class MNISTDataModule(LightningDataModule):
         self.normalize = normalize
         self.seed = seed
 
+        self.train_dataset_size = len(
+            IndexedMNIST(
+                self.data_dir,
+                train=True,
+                download=True,
+                transform=transform_lib.ToTensor(),
+            )
+        )
+
     @property
     def num_classes(self):
         """
@@ -64,8 +80,15 @@ class MNISTDataModule(LightningDataModule):
         """
         Saves MNIST files to data_dir
         """
-        MNIST(self.data_dir, train=True, download=True, transform=transform_lib.ToTensor())
-        MNIST(self.data_dir, train=False, download=True, transform=transform_lib.ToTensor())
+        IndexedMNIST(
+            self.data_dir, train=True, download=True, transform=transform_lib.ToTensor()
+        )
+        IndexedMNIST(
+            self.data_dir,
+            train=False,
+            download=True,
+            transform=transform_lib.ToTensor(),
+        )
 
     def train_dataloader(self, batch_size=32, transforms=None):
         """
@@ -76,12 +99,14 @@ class MNISTDataModule(LightningDataModule):
         """
         transforms = transforms or self.train_transforms or self._default_transforms()
 
-        dataset = MNIST(self.data_dir, train=True, download=False, transform=transforms)
+        dataset = IndexedMNIST(
+            self.data_dir, train=True, download=False, transform=transforms
+        )
         train_length = len(dataset)
         dataset_train, _ = random_split(
             dataset,
             [train_length - self.val_split, self.val_split],
-            generator=torch.Generator().manual_seed(self.seed)
+            generator=torch.Generator().manual_seed(self.seed),
         )
         loader = DataLoader(
             dataset_train,
@@ -89,7 +114,7 @@ class MNISTDataModule(LightningDataModule):
             shuffle=True,
             num_workers=self.num_workers,
             drop_last=True,
-            pin_memory=True
+            pin_memory=True,
         )
         return loader
 
@@ -101,12 +126,14 @@ class MNISTDataModule(LightningDataModule):
             transforms: custom transforms
         """
         transforms = transforms or self.val_transforms or self._default_transforms()
-        dataset = MNIST(self.data_dir, train=True, download=True, transform=transforms)
+        dataset = IndexedMNIST(
+            self.data_dir, train=True, download=True, transform=transforms
+        )
         train_length = len(dataset)
         _, dataset_val = random_split(
             dataset,
             [train_length - self.val_split, self.val_split],
-            generator=torch.Generator().manual_seed(self.seed)
+            generator=torch.Generator().manual_seed(self.seed),
         )
         loader = DataLoader(
             dataset_val,
@@ -114,7 +141,7 @@ class MNISTDataModule(LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers,
             drop_last=True,
-            pin_memory=True
+            pin_memory=True,
         )
         return loader
 
@@ -127,23 +154,27 @@ class MNISTDataModule(LightningDataModule):
         """
         transforms = transforms or self.val_transforms or self._default_transforms()
 
-        dataset = MNIST(self.data_dir, train=False, download=False, transform=transforms)
+        dataset = IndexedMNIST(
+            self.data_dir, train=False, download=False, transform=transforms
+        )
         loader = DataLoader(
             dataset,
             batch_size=batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             drop_last=True,
-            pin_memory=True
+            pin_memory=True,
         )
         return loader
 
     def _default_transforms(self):
         if self.normalize:
-            mnist_transforms = transform_lib.Compose([
-                transform_lib.ToTensor(),
-                transform_lib.Normalize(mean=(0.5,), std=(0.5,)),
-            ])
+            mnist_transforms = transform_lib.Compose(
+                [
+                    transform_lib.ToTensor(),
+                    transform_lib.Normalize(mean=(0.5,), std=(0.5,)),
+                ]
+            )
         else:
             mnist_transforms = transform_lib.ToTensor()
 

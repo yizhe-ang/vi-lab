@@ -51,6 +51,11 @@ class MNISTDecoder(nn.Module):
         x = x.reshape(-1, 784)
 
         loc_img = self.decode(z)
-        dist = Bernoulli(probs=loc_img)
 
-        return dist.log_prob(x).sum(-1)
+        # FIXME Use F.binary_cross_entropy instead? it's the same
+        dist = Bernoulli(probs=loc_img)
+        log_px_z = dist.log_prob(x).sum(-1)
+
+        # log_px_z = -F.binary_cross_entropy(loc_img, x, reduction="none").sum(-1)
+
+        return log_px_z

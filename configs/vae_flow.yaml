@@ -1,7 +1,7 @@
-name: vanilla_mnist
+name: elbo_flow
 seed: 0
 
-experiment: Experiment
+experiment: VAEFlowExperiment
 
 max_epochs: 100
 
@@ -11,7 +11,11 @@ datamodule: MNISTDataModule
 datamodule_args:
   data_dir: data
 
-encoder: MNISTEncoder
+flow: PlanarModel
+flow_args:
+  n_layers: 10
+
+encoder: MNISTFlowEncoder
 encoder_args:
 
 decoder: MNISTDecoder
@@ -20,8 +24,9 @@ decoder_args:
 vae: VAE
 vae_args:
 
-loss: elbo_loss
+loss: elbo_loss_mc
 loss_args:
+  # K: 10
 
 optimizer: Adam
 optimizer_args:

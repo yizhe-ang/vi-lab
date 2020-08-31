@@ -1,7 +1,6 @@
 import torch
 from pytorch_lightning.callbacks import Callback
 import torchvision
-import math
 import wandb
 
 
@@ -41,7 +40,7 @@ class LatentDimInterpolator(Callback):
             # Create grid
             range_len = self.range_end - self.range_start
             grid = torchvision.utils.make_grid(images, nrow=range_len)
-            grid = grid.permute(1, 2, 0)
+            grid = grid.permute(1, 2, 0).cpu().numpy()
 
             # Log samples
             trainer.logger.experiment.log(
@@ -67,6 +66,7 @@ class LatentDimInterpolator(Callback):
 
                     # Generate samples
                     img = vae.decoder.decode(z)
+                    img = img.view(1, *pl_module.img_dim)
 
                     images.append(img)
 

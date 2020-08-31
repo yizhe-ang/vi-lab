@@ -32,8 +32,29 @@ class VAE(nn.Module):
         """
         return Normal(torch.zeros_like(z), torch.ones_like(z))
 
-    def forward(self, x: torch.tensor):
-        pass
+    def forward(self, x: torch.tensor, indices=None, K=1):
+        """Return components required for loss computation
+
+        Parameters
+        ----------
+        x : torch.tensor
+            [description]
+        K : int, optional
+            For IWAE, by default 1
+
+        Returns
+        -------
+        [type]
+            [B,],     [B,],     [B,]
+            log_qz_x, log_px_z, log_pz, qz_x, pz
+        """
+        log_qz_x, z, qz_x = self.encoder(x, indices=indices, K=K)
+        pz = self.prior(z)
+        log_pz = pz.log_prob(z).sum(-1)
+
+        log_px_z = self.decoder(x, z)
+
+        return log_qz_x, log_px_z, log_pz, qz_x, pz
 
     @torch.no_grad()
     def sample(self, num_samples: int, device: torch.device) -> torch.tensor:

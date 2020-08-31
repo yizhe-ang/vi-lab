@@ -1,3 +1,5 @@
+from functools import partial
+
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning.core.lightning import LightningModule
@@ -8,22 +10,27 @@ import src.losses as losses
 import src.models.decoders as decoders
 import src.models.encoders as encoders
 import src.models.vaes as vaes
+from src.models.vaes import VAE
+import src.nf as nf
 
 
-class Experiment(LightningModule):
+class VAEExperiment(LightningModule):
     def __init__(self, hparams):
         super().__init__()
 
         # Create `hparams` attribute
         self.save_hyperparameters(hparams)
-        # Set-up nn modules according to `hparams`
-        self._init_system()
         # Initialize datamodule
         self._init_datamodule()
+        # Set-up nn modules according to `hparams`
+        self._init_system()
         # Infer img dims
         self.img_dim = self.datamodule.size()
         # Initialize loss function
         self.loss = getattr(losses, self.hparams["loss"])
+        loss_args = self.hparams['loss_args']
+        if loss_args:
+            self.loss = partial(self.loss, **loss_args)
 
         # Have to rework forward calls for this to work
         # self.example_input_array = torch.randn(32, 1, 28, 28)
@@ -31,18 +38,27 @@ class Experiment(LightningModule):
     def _init_system(self):
         """Set-up nn modules according to `hparams`
         """
+        encoder = self._init_encoder()
+        decoder = self._init_decoder()
+
+        vae_args = self.hparams["vae_args"] or {}
+        self.vae = getattr(vaes, self.hparams["vae"])(encoder, decoder, **vae_args)
+
+    def _init_encoder(self):
         encoder_args = self.hparams["encoder_args"] or {}
         encoder = getattr(encoders, self.hparams["encoder"])(
             self.hparams["z_dim"], **encoder_args
         )
 
+        return encoder
+
+    def _init_decoder(self):
         decoder_args = self.hparams["decoder_args"] or {}
         decoder = getattr(decoders, self.hparams["decoder"])(
             self.hparams["z_dim"], **decoder_args
         )
 
-        vae_args = self.hparams["vae_args"] or {}
-        self.vae = getattr(vaes, self.hparams["vae"])(encoder, decoder, **vae_args)
+        return decoder
 
     def _init_datamodule(self):
         self.datamodule = getattr(datamodules, self.hparams["datamodule"])(
@@ -50,8 +66,8 @@ class Experiment(LightningModule):
         )
 
     def _run_step(self, batch):
-        x, _ = batch
-        loss, recon_loss, kl_div = self.loss(self.vae, x)
+        _, x, _ = batch
+        loss, recon_loss, kl_div = self.loss(self.vae, x, indices=None)
 
         return loss, recon_loss, kl_div
 
@@ -88,3 +104,46 @@ class Experiment(LightningModule):
         return getattr(optim, self.hparams["optimizer"])(
             self.vae.parameters(), **optimizer_args
         )
+
+
+class VAELangevinExperiment(VAEExperiment):
+    def __init__(self, hparams):
+        super().__init__(hparams)
+
+    def _init_encoder(self):
+        z_dim = self.hparams['z_dim']
+        dataset_size = self.datamodule.train_dataset_size
+        device = self.device
+
+        encoder_args = self.hparams["encoder_args"] or {}
+        encoder = getattr(encoders, self.hparams["encoder"])(
+            z_dim, dataset_size, device, **encoder_args
+        )
+
+        return encoder
+
+    def _run_step(self, batch):
+        indices, x, _ = batch
+        loss, recon_loss, kl_div = self.loss(self.vae, x, indices)
+
+        return loss, recon_loss, kl_div
+
+
+class VAEFlowExperiment(VAEExperiment):
+    def __init__(self, hparams):
+        super().__init__(hparams)
+
+    def _init_encoder(self):
+        # VAE + Flow encoder
+        z_dim = self.hparams['z_dim']
+
+        # Init flow
+        flow_args = self.hparams["flow_args"] or {}
+        flow = getattr(nf, self.hparams['flow'])(z_dim, **flow_args)
+
+        encoder_args = self.hparams["encoder_args"] or {}
+        encoder = getattr(encoders, self.hparams["encoder"])(
+            z_dim, flow, **encoder_args
+        )
+
+        return encoder

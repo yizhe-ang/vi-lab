@@ -1,3 +1,5 @@
-numpy
 pyyaml
+numpy
+scipy
 pytorch-lightning
+wandb

@@ -1,11 +1,11 @@
 import argparse
 
-import pl_bolts.datamodules as datamodules
 import pytorch_lightning as pl
 import yaml
 from pytorch_lightning.loggers import WandbLogger
 
 import src.experiments as experiments
+from src.callbacks import VAEImageSampler, LatentDimInterpolator
 
 
 def main(hparams):
@@ -18,8 +18,9 @@ def main(hparams):
     # Init experiment
     exp = getattr(experiments, hparams["experiment"])(hparams)
 
+    # FIXME shift this to experiment object too?
     # Init callbacks
-    callbacks = None
+    callbacks = [VAEImageSampler(num_samples=8), LatentDimInterpolator()]
 
     # Init trainer
     trainer = pl.Trainer(
@@ -27,12 +28,14 @@ def main(hparams):
         benchmark=True,
         callbacks=callbacks,
         early_stop_callback=False,
-        fast_dev_run=True,
-        # gpus=1,
+        # fast_dev_run=True,
+        gpus=1,
         logger=wandb_logger,
-        reload_dataloaders_every_epoch=False,
+        # reload_dataloaders_every_epoch=False,
         weights_summary="full",
         max_epochs=hparams["max_epochs"],
+        # limit_val_batches=0.,
+        # gradient_clip_val=0.1
     )
     trainer.fit(exp, exp.datamodule)
 
@@ -40,7 +43,7 @@ def main(hparams):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="VAE Experiment")
     parser.add_argument(
-        "--config", "-c", help="path to the config file", default="configs/config.yaml"
+        "--config", "-c", help="path to the config file", default="configs/vae_flow.yaml"
     )
 
     args = parser.parse_args()

@@ -30,7 +30,7 @@ class VAEImageSampler(Callback):
         # Create grid
         images = images.view(self.num_samples, *pl_module.img_dim)
         grid = torchvision.utils.make_grid(images)
-        grid = grid.permute(1, 2, 0)
+        grid = grid.permute(1, 2, 0).cpu().numpy()
 
         # Log samples
         trainer.logger.experiment.log(
