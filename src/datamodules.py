@@ -7,11 +7,11 @@ from torchvision import transforms as transform_lib
 from torchvision.datasets import MNIST
 
 
-class IndexedMNIST(MNIST):
-    def __getitem__(self, index):
-        img, target = super().__getitem__(index)
+# class IndexedMNIST(MNIST):
+#     def __getitem__(self, index):
+#         img, target = super().__getitem__(index)
 
-        return index, img, target
+#         return index, img, target
 
 
 class MNISTDataModule(LightningDataModule):
@@ -21,6 +21,7 @@ class MNISTDataModule(LightningDataModule):
     def __init__(
         self,
         data_dir: str,
+        batch_size: int = 32,
         val_split: int = 5000,
         num_workers: int = 16,
         normalize: bool = False,
@@ -54,19 +55,20 @@ class MNISTDataModule(LightningDataModule):
         super().__init__(*args, **kwargs)
         self.dims = (1, 28, 28)
         self.data_dir = data_dir
+        self.batch_size = batch_size
         self.val_split = val_split
         self.num_workers = num_workers
         self.normalize = normalize
         self.seed = seed
 
-        self.train_dataset_size = len(
-            IndexedMNIST(
-                self.data_dir,
-                train=True,
-                download=True,
-                transform=transform_lib.ToTensor(),
-            )
-        )
+        # self.train_dataset_size = len(
+        #     IndexedMNIST(
+        #         self.data_dir,
+        #         train=True,
+        #         download=True,
+        #         transform=transform_lib.ToTensor(),
+        #     )
+        # )
 
     @property
     def num_classes(self):
@@ -80,26 +82,25 @@ class MNISTDataModule(LightningDataModule):
         """
         Saves MNIST files to data_dir
         """
-        IndexedMNIST(
+        MNIST(
             self.data_dir, train=True, download=True, transform=transform_lib.ToTensor()
         )
-        IndexedMNIST(
+        MNIST(
             self.data_dir,
             train=False,
             download=True,
             transform=transform_lib.ToTensor(),
         )
 
-    def train_dataloader(self, batch_size=32, transforms=None):
+    def train_dataloader(self, transforms=None):
         """
         MNIST train set removes a subset to use for validation
         Args:
-            batch_size: size of batch
             transforms: custom transforms
         """
         transforms = transforms or self.train_transforms or self._default_transforms()
 
-        dataset = IndexedMNIST(
+        dataset = MNIST(
             self.data_dir, train=True, download=False, transform=transforms
         )
         train_length = len(dataset)
@@ -110,7 +111,7 @@ class MNISTDataModule(LightningDataModule):
         )
         loader = DataLoader(
             dataset_train,
-            batch_size=batch_size,
+            batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
             drop_last=True,
@@ -118,15 +119,14 @@ class MNISTDataModule(LightningDataModule):
         )
         return loader
 
-    def val_dataloader(self, batch_size=32, transforms=None):
+    def val_dataloader(self, transforms=None):
         """
         MNIST val set uses a subset of the training set for validation
         Args:
-            batch_size: size of batch
             transforms: custom transforms
         """
         transforms = transforms or self.val_transforms or self._default_transforms()
-        dataset = IndexedMNIST(
+        dataset = MNIST(
             self.data_dir, train=True, download=True, transform=transforms
         )
         train_length = len(dataset)
@@ -137,7 +137,7 @@ class MNISTDataModule(LightningDataModule):
         )
         loader = DataLoader(
             dataset_val,
-            batch_size=batch_size,
+            batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             drop_last=True,
@@ -145,21 +145,20 @@ class MNISTDataModule(LightningDataModule):
         )
         return loader
 
-    def test_dataloader(self, batch_size=32, transforms=None):
+    def test_dataloader(self, transforms=None):
         """
         MNIST test set uses the test split
         Args:
-            batch_size: size of batch
             transforms: custom transforms
         """
         transforms = transforms or self.val_transforms or self._default_transforms()
 
-        dataset = IndexedMNIST(
+        dataset = MNIST(
             self.data_dir, train=False, download=False, transform=transforms
         )
         loader = DataLoader(
             dataset,
-            batch_size=batch_size,
+            batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             drop_last=True,

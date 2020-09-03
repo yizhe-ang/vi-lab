@@ -1,0 +1,34 @@
+name: elbo
+seed: 0
+
+experiment: VAEExperiment
+
+max_steps: 150_000
+
+latent_dim: 32
+
+datamodule: MNISTDataModule
+datamodule_args:
+  data_dir: data
+  batch_size: 256
+  val_split: 10_000
+
+prior: standard_normal
+prior_args: {}
+
+approx_posterior: cond_diagonal_normal
+approx_posterior_args: {}
+
+inputs_encoder:
+inputs_encoder_args: {}
+
+likelihood: cond_inpt_bernoulli
+likelihood_args: {}
+
+optimizer: Adam
+optimizer_args:
+  lr: 0.0005
+
+kl_warmup_fraction: 0.1
+kl_multiplier_initial: 0.5
+kl_multiplier_max: 1

@@ -5,82 +5,202 @@
 """
 import torch
 import torch.nn as nn
-from torch.distributions import Distribution, Normal
+from nflows.utils import torchutils
+from nflows.distributions import Distribution
 
 
-class VAE(nn.Module):
-    def __init__(self, encoder: nn.Module, decoder: nn.Module) -> None:
+class VariationalAutoencoder(nn.Module):
+    """Implementation of a standard VAE."""
+
+    def __init__(
+        self,
+        prior: Distribution,
+        approximate_posterior: Distribution,
+        likelihood: Distribution,
+        inputs_encoder: nn.Module = None,
+    ) -> None:
+        """
+        Parameters
+        ----------
+        prior : Distribution
+            p(z)
+        approximate_posterior : Distribution
+            q(z|x)
+        likelihood : Distribution
+            p(x|z)
+        inputs_encoder : nn.Module, optional
+            Required by flow models for the approx posterior;
+            an encoder that encodes the input into a context vector,
+            which is fed into both the cond base dist and each flow step,
+            by default None
+        """
         super().__init__()
+        self.prior = prior
+        self.approximate_posterior = approximate_posterior
+        self.likelihood = likelihood
+        self.inputs_encoder = inputs_encoder
 
-        self.encoder = encoder
-        self.decoder = decoder
-        # Infer z_dim
-        self.z_dim = self.encoder.z_dim
+    def forward(self, *args):
+        raise RuntimeError("Forward method cannot be called for a VAE object.")
 
-    def prior(self, z: torch.tensor) -> Distribution:
-        """Assume prior is standard normal, p(z) ~ Normal(0, 1)
+    def stochastic_elbo(
+        self, inputs: torch.Tensor, num_samples=1, kl_multiplier=1, keepdim=False
+    ) -> torch.Tensor:
+        """Calculates an unbiased Monte-Carlo estimate of the evidence lower bound.
 
-        Parameters
-        ----------
-        z : torch.tensor
-            [B, D], Latent points (to infer the shapes)
-
-        Returns
-        -------
-        Distribution
-            Standard normal distribution of latent points
-        """
-        return Normal(torch.zeros_like(z), torch.ones_like(z))
-
-    def forward(self, x: torch.tensor, indices=None, K=1):
-        """Return components required for loss computation
+        Note: the KL term is also estimated via Monte Carlo
 
         Parameters
         ----------
-        x : torch.tensor
-            [description]
-        K : int, optional
-            For IWAE, by default 1
+        inputs : torch.Tensor
+            [B, D]
+        num_samples : int, optional
+            Number of samples to use for the Monte-Carlo estimate, by default 1
+        kl_multiplier : int, optional
+            , by default 1
+        keepdim : bool, optional
+            , by default False
 
         Returns
         -------
-        [type]
-            [B,],     [B,],     [B,]
-            log_qz_x, log_px_z, log_pz, qz_x, pz
+        torch.Tensor
+            An ELBO estimate for each input
+            [B, K, D] if keepdim
+            [B] otherwise
         """
-        log_qz_x, z, qz_x = self.encoder(x, indices=indices, K=K)
-        pz = self.prior(z)
-        log_pz = pz.log_prob(z).sum(-1)
+        # Sample latents and calculate their log prob under the encoder
+        if self.inputs_encoder is None:
+            posterior_context = inputs
+        else:
+            posterior_context = self.inputs_encoder(inputs)
 
-        log_px_z = self.decoder(x, z)
+        latents, log_q_z = self.approximate_posterior.sample_and_log_prob(
+            num_samples, context=posterior_context
+        )
+        latents = torchutils.merge_leading_dims(latents, num_dims=2)
+        log_q_z = torchutils.merge_leading_dims(log_q_z, num_dims=2)
 
-        return log_qz_x, log_px_z, log_pz, qz_x, pz
+        # Compute log prob of latents under the prior
+        log_p_z = self.prior.log_prob(latents)
 
-    @torch.no_grad()
-    def sample(self, num_samples: int, device: torch.device) -> torch.tensor:
-        """Generate samples from prior dist (gradient calcs disabled)
+        # Compute log prob of inputs under the decoder,
+        inputs = torchutils.repeat_rows(inputs, num_reps=num_samples)
+        log_p_x = self._likelihood.log_prob(inputs, context=latents)
+
+        # Compute ELBO
+        elbo = log_p_x + kl_multiplier * (log_p_z - log_q_z)
+        elbo = torchutils.split_leading_dim(elbo, [-1, num_samples])
+
+        if keepdim:
+            return elbo
+        else:
+            return torch.sum(elbo, dim=1) / num_samples  # Average ELBO across samples
+
+    # FIXME What is this exactly? IWAE bound?
+    def log_prob_lower_bound(
+        self, inputs: torch.Tensor, num_samples=100
+    ) -> torch.Tensor:
+        elbo = self.stochastic_elbo(inputs, num_samples=num_samples, keepdim=True)
+        log_prob_lower_bound = torch.logsumexp(elbo, dim=1) - torch.log(
+            torch.Tensor([num_samples])
+        )
+
+        return log_prob_lower_bound
+
+    def decode(self, latents: torch.Tensor, mean: bool) -> torch.Tensor:
+        """x ~ p(x|z)
+
+        Parameters
+        ----------
+        latents : torch.Tensor
+            [B, Z]
+        mean : bool
+            Uses the mean of the decoder instead of sampling from it
+
+        Returns
+        -------
+        torch.Tensor
+            [B, D]
+        """
+        if mean:
+            return self.likelihood.mean(context=latents)
+        else:
+            samples = self.likelihood.sample(num_samples=1, context=latents)
+
+            return torchutils.merge_leading_dims(samples, num_dims=2)
+
+    def sample(self, num_samples: int, mean=False) -> torch.Tensor:
+        """z ~ p(z), x ~ p(x|z)
 
         Parameters
         ----------
         num_samples : int
-        device : torch.device
+        mean : bool, optional
+            Uses the mean of the decoder instead of sampling from it, by default False
 
         Returns
         -------
-        torch.tensor
-            [B, D], Generated samples
+        torch.Tensor
+            [num_samples, D]
         """
-        self.eval()
+        latents = self.prior.sample(num_samples)
 
-        # Assume prior ~ N(0,1)
-        dim = (num_samples, self.z_dim)
-        z = torch.normal(mean=0.0, std=1.0, size=dim, device=device)
+        return self.decode(latents, mean)
 
-        loc_img = self.decoder.decode(z)
+    def encode(self, inputs: torch.Tensor, num_samples: int = None) -> torch.Tensor:
+        """z ~ q(z|x)
 
-        self.train()
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            [B, D]
+        num_samples : int, optional
+            If None, only one latent sample is generated per input, by default None
 
-        return loc_img
+        Returns
+        -------
+        torch.Tensor
+            [B, Z] if num_samples is None,
+            [B, K, Z] otherwise
+        """
+        if num_samples is None:
+            latents = self.approximate_posterior.sample(num_samples=1, context=inputs)
+            latents = torchutils.merge_leading_dims(latents, num_dims=2)
+        else:
+            latents = self.approximate_posterior.sample(
+                num_samples=num_samples, context=inputs
+            )
 
-    def reconstruct(self):
-        pass
+        return latents
+
+    def reconstruct(
+        self, inputs: torch.Tensor, num_samples: int = None, mean=False
+    ) -> torch.Tensor:
+        """Reconstruct given inputs
+
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            [B, D]
+        num_samples : int, optional
+            Number of reconstructions to generate per input
+            If None, only one reconstruction is generated per input,
+            by default None
+        mean : bool, optional
+            Uses the mean of the decoder instead of sampling from it, by default False
+
+        Returns
+        -------
+        torch.Tensor
+            [B, D] if num_samples is None,
+            [B, K, Z] otherwise
+        """
+        latents = self.encode(inputs, num_samples)
+        if num_samples is not None:
+            latents = torchutils.merge_leading_dims(latents, num_dims=2)
+
+        recons = self.decode(latents, mean)
+        if num_samples is not None:
+            recons = torchutils.split_leading_dim(recons, [-1, num_samples])
+
+        return recons

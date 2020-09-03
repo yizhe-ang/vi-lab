@@ -50,7 +50,8 @@ class LatentDimInterpolator(Callback):
     def interpolate_latent_space(self, pl_module):
         images = []
 
-        vae = pl_module.vae
+        model = pl_module.model
+        latent_dim = pl_module.hparams['latent_dim']
 
         with torch.no_grad():
             pl_module.eval()
@@ -58,14 +59,14 @@ class LatentDimInterpolator(Callback):
             for z1 in range(self.range_start, self.range_end, 1):
                 for z2 in range(self.range_start, self.range_end, 1):
                     # Set all dims to zero
-                    z = torch.zeros(1, vae.z_dim, device=pl_module.device)
+                    z = torch.zeros(1, latent_dim, device=pl_module.device)
 
                     # Set the first 2 dims to the value
                     z[:, 0] = torch.tensor(z1)
                     z[:, 1] = torch.tensor(z2)
 
                     # Generate samples
-                    img = vae.decoder.decode(z)
+                    img = model.decode(z)
                     img = img.view(1, *pl_module.img_dim)
 
                     images.append(img)

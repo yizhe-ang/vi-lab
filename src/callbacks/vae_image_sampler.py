@@ -4,7 +4,7 @@ import wandb
 
 
 class VAEImageSampler(Callback):
-    def __init__(self, num_samples=3) -> None:
+    def __init__(self, num_samples=64) -> None:
         """Generates images and logs to wandb
 
         Requirements:
@@ -23,13 +23,13 @@ class VAEImageSampler(Callback):
     def on_epoch_end(self, trainer, pl_module):
 
         # VAE model
-        vae = pl_module.vae
+        model = pl_module.model
         # Get samples
-        images = vae.sample(self.num_samples, pl_module.device)
+        images = model.sample(self.num_samples)
 
         # Create grid
         images = images.view(self.num_samples, *pl_module.img_dim)
-        grid = torchvision.utils.make_grid(images)
+        grid = torchvision.utils.make_grid(images, nrow=8)
         grid = grid.permute(1, 2, 0).cpu().numpy()
 
         # Log samples

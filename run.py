@@ -18,32 +18,31 @@ def main(hparams):
     # Init experiment
     exp = getattr(experiments, hparams["experiment"])(hparams)
 
-    # FIXME shift this to experiment object too?
-    # Init callbacks
-    callbacks = [VAEImageSampler(num_samples=8), LatentDimInterpolator()]
-
     # Init trainer
     trainer = pl.Trainer(
         deterministic=True,
         benchmark=True,
-        callbacks=callbacks,
+        callbacks=exp.callbacks,
         early_stop_callback=False,
-        # fast_dev_run=True,
+        fast_dev_run=True,
         gpus=1,
         logger=wandb_logger,
         # reload_dataloaders_every_epoch=False,
-        weights_summary="full",
-        max_epochs=hparams["max_epochs"],
+        weights_summary="top",
+        max_epochs=None,
+        max_steps=hparams['max_steps']
         # limit_val_batches=0.,
         # gradient_clip_val=0.1
     )
+
     trainer.fit(exp, exp.datamodule)
+    trainer.test(datamodule=exp.datamodule)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="VAE Experiment")
     parser.add_argument(
-        "--config", "-c", help="path to the config file", default="configs/vae_flow.yaml"
+        "--config", "-c", help="path to the config file", default="configs/config.yaml"
     )
 
     args = parser.parse_args()
