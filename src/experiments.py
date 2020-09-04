@@ -2,9 +2,9 @@ import pytorch_lightning as pl
 from pytorch_lightning.core.lightning import LightningModule
 from torch import optim
 from pytorch_lightning.callbacks import LearningRateLogger
+import torch
 
 import src.datamodules as datamodules
-import src.losses as losses
 import src.models.dists as dists
 import src.models.nns as nns
 from src.models.vaes import VariationalAutoencoder
@@ -30,6 +30,9 @@ class VAEExperiment(LightningModule):
         # self.example_input_array = torch.randn(32, 1, 28, 28)
 
     def _init_system(self):
+        # HACK
+        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+
         """Set-up nn modules according to `hparams`"""
         latent_dim = self.hparams["latent_dim"]
 

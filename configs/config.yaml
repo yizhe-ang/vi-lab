@@ -12,8 +12,9 @@ datamodule_args:
   data_dir: data
   batch_size: 256
   val_split: 10_000
+  # num_workers: 0
 
-prior: standard_normal
+prior: standard_flow
 prior_args: {}
 
 approx_posterior: cond_diagonal_normal
