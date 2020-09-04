@@ -44,7 +44,7 @@ class VAEExperiment(LightningModule):
         )
 
         if self.hparams["inputs_encoder"]:
-            inputs_encoder = getattr(nns, self.hparams["input_encoder"])(
+            inputs_encoder = getattr(nns, self.hparams["inputs_encoder"])(
                 latent_dim * 2, **self.hparams["inputs_encoder_args"]
             )
         else:
@@ -96,7 +96,7 @@ class VAEExperiment(LightningModule):
     def validation_step(self, batch, batch_idx):
         elbo = self._run_step(batch)
 
-        result = pl.EvalResult(elbo)
+        result = pl.EvalResult(checkpoint_on=elbo)
         result.log_dict({"val_elbo": elbo})
 
         return result
@@ -121,4 +121,7 @@ class VAEExperiment(LightningModule):
             "interval": "step",
         }
 
-        return optimizer, scheduler
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': scheduler
+        }

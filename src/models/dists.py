@@ -12,7 +12,7 @@ from nflows.nn.nets import ResidualNet
 from nflows.transforms import Transform
 from nflows.utils import torchutils
 
-from .convs import ConvDecoder, ConvEncoder
+from .nns import ConvDecoder, ConvEncoder
 
 
 # HELPER TRANSFORMS ############################################################

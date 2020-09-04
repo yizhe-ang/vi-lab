@@ -1,3 +1,4 @@
+import torch
 from pytorch_lightning import Callback
 import torchvision
 import wandb
@@ -21,18 +22,22 @@ class VAEImageSampler(Callback):
         self.num_samples = num_samples
 
     def on_epoch_end(self, trainer, pl_module):
+        with torch.no_grad():
+            pl_module.eval()
 
-        # VAE model
-        model = pl_module.model
-        # Get samples
-        images = model.sample(self.num_samples)
+            # VAE model
+            model = pl_module.model
+            # Get samples
+            images = model.sample(self.num_samples, mean=True)
 
-        # Create grid
-        images = images.view(self.num_samples, *pl_module.img_dim)
-        grid = torchvision.utils.make_grid(images, nrow=8)
-        grid = grid.permute(1, 2, 0).cpu().numpy()
+            # Create grid
+            images = images.view(self.num_samples, *pl_module.img_dim)
+            grid = torchvision.utils.make_grid(images, nrow=8)
+            grid = grid.permute(1, 2, 0).cpu().numpy()
 
-        # Log samples
-        trainer.logger.experiment.log(
-            {"samples": wandb.Image(grid)}, step=trainer.global_step
-        )
+            # Log samples
+            trainer.logger.experiment.log(
+                {"samples": wandb.Image(grid)}, commit=False
+            )
+
+        pl_module.train()

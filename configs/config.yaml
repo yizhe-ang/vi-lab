@@ -1,4 +1,4 @@
-name: elbo
+name: vanilla
 seed: 0
 
 experiment: VAEExperiment
@@ -22,7 +22,7 @@ approx_posterior_args: {}
 inputs_encoder:
 inputs_encoder_args: {}
 
-likelihood: cond_inpt_bernoulli
+likelihood: cond_indpt_bernoulli
 likelihood_args: {}
 
 optimizer: Adam

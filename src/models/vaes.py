@@ -85,7 +85,7 @@ class VariationalAutoencoder(nn.Module):
 
         # Compute log prob of inputs under the decoder,
         inputs = torchutils.repeat_rows(inputs, num_reps=num_samples)
-        log_p_x = self._likelihood.log_prob(inputs, context=latents)
+        log_p_x = self.likelihood.log_prob(inputs, context=latents)
 
         # Compute ELBO
         elbo = log_p_x + kl_multiplier * (log_p_z - log_q_z)

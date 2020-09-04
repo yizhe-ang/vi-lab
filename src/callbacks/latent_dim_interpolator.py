@@ -44,7 +44,7 @@ class LatentDimInterpolator(Callback):
 
             # Log samples
             trainer.logger.experiment.log(
-                {"latent_interpolation": wandb.Image(grid)}, step=trainer.global_step
+                {"latent_interpolation": wandb.Image(grid)}, commit=False
             )
 
     def interpolate_latent_space(self, pl_module):
@@ -66,7 +66,7 @@ class LatentDimInterpolator(Callback):
                     z[:, 1] = torch.tensor(z2)
 
                     # Generate samples
-                    img = model.decode(z)
+                    img = model.decode(z, mean=True)
                     img = img.view(1, *pl_module.img_dim)
 
                     images.append(img)

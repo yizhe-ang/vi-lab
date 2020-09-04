@@ -158,7 +158,8 @@ class MNISTDataModule(LightningDataModule):
         )
         loader = DataLoader(
             dataset,
-            batch_size=self.batch_size,
+            # batch_size=self.batch_size,
+            batch_size=16,
             shuffle=False,
             num_workers=self.num_workers,
             drop_last=True,
