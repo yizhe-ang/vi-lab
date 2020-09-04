@@ -117,6 +117,9 @@ class MNISTLangevinEncoder(MNISTEncoder):
 
         log_qz_x = qz_x.log_prob(z).sum(-1)
 
+        print('Posterior term #######################')
+        print(log_qz_x)
+
         return log_qz_x, z, qz_x
 
 

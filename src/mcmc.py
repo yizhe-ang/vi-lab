@@ -54,6 +54,7 @@ class LangevinMCMC:
         assert x.requires_grad, "Taking gradients w.r.t. z"
 
         log_p = self.dist.log_prob(x).sum()
+
         grad = torch.autograd.grad(log_p, x, create_graph=create_graph)[0]
 
         return grad
@@ -77,15 +78,15 @@ class LangevinMCMC:
         points : torch.tensor
             [B, D], Final sample from each chain
         """
-        if save_samples:
-            self.samples = torch.zeros(n_steps, *x.shape)
+        # if save_samples:
+        #     self.samples = torch.zeros(n_steps, *x.shape)
 
         x.requires_grad_()
 
         for i in range(n_steps):
             x = self._step(x, create_graph)
 
-            if save_samples:
-                self.samples[i] += x.detach()
+            # if save_samples:
+            #     self.samples[i] += x.detach()
 
         return x if create_graph else x.detach()

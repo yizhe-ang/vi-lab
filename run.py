@@ -34,7 +34,7 @@ def main(hparams):
         # reload_dataloaders_every_epoch=False,
         weights_summary="full",
         max_epochs=hparams["max_epochs"],
-        # limit_val_batches=0.,
+        limit_val_batches=0.,
         # gradient_clip_val=0.1
     )
     trainer.fit(exp, exp.datamodule)

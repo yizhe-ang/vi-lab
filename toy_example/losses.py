@@ -105,7 +105,10 @@ def gibbs_step(z, q_dist):
 def gibbs_kl(q_model, p_dist, s=10, t=1):
     q_dist = q_model.get_dist()
     # Get cached sample
-    z = q_model.prev_sample
+    # z = q_model.prev_sample
+
+    # Or sample directly from dist?
+    z = q_dist.sample()
 
     # Run w/o reparam
     with torch.no_grad():

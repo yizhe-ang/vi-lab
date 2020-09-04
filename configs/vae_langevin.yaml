@@ -13,9 +13,9 @@ datamodule_args:
 
 encoder: MNISTLangevinEncoder
 encoder_args:
-  eps: 0.01
-  s: 5
-  t: 5
+  eps: 0.1
+  s: 10
+  t: 10
 
 decoder: MNISTDecoder
 decoder_args:

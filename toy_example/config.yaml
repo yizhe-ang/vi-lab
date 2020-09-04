@@ -1,4 +1,4 @@
-name: lang_s10_t30
+name: gibbs_s1_t8_direct
 seed: 0
 
 n_iter: 10_000
@@ -8,10 +8,10 @@ q_model: MVNormalDist
 
 optimizer: Adam
 optimizer_args:
-  lr: 0.001
+  lr: 0.003
 
 loss: gibbs_kl
 loss_args:
   # eta: 0.1
-  s: 10
-  t: 30
+  s: 1
+  t: 8
