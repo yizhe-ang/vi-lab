@@ -1,9 +1,10 @@
-name: elbo
+name: elbo_mc
 seed: 0
 
 experiment: VAEExperiment
 
-max_epochs: 100
+# max_epochs: 100
+max_steps: 150_000
 
 z_dim: 20
 
@@ -11,10 +12,10 @@ datamodule: MNISTDataModule
 datamodule_args:
   data_dir: data
 
-encoder: MNISTEncoder
+encoder: ConvEncoder
 encoder_args:
 
-decoder: MNISTDecoder
+decoder: ConvDecoder
 decoder_args:
 
 vae: VAE

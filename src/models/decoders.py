@@ -3,6 +3,66 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Bernoulli
 
+from src.models.nns import Decoder
+
+class ConvDecoder(nn.Module):
+    def __init__(self, z_dim):
+        super().__init__()
+
+        self.z_dim = z_dim
+        self.decoder = Decoder(
+            128,
+            z_dim,
+            28,
+            28,
+            1
+        )
+
+    def decode(self, z: torch.tensor) -> torch.tensor:
+        """Decode latent points into data points
+
+        Parameters
+        ----------
+        z : torch.tensor
+            [B, Z]
+
+        Returns
+        -------
+        torch.tensor
+            [B, D]
+        """
+        # Output is Bernoulli
+        loc_img = torch.sigmoid(self.decoder(z))
+
+        return loc_img
+
+    def forward(self, x: torch.tensor, z: torch.tensor) -> torch.tensor:
+        """log p(x|z), reconstruction term
+
+        Parameters
+        ----------
+        x : torch.tensor
+            [B, C, H, W], Data points
+        z : torch.tensor
+            [B, Z], Latent points
+
+        Returns
+        -------
+        torch.tensor
+            [B,], log p(x|z)
+        """
+        x = x.reshape(-1, 784)
+
+        loc_img = self.decode(z)
+
+        # FIXME Use F.binary_cross_entropy instead? it's the same
+        dist = Bernoulli(probs=loc_img)
+        log_px_z = dist.log_prob(x).sum(-1)
+
+        # log_px_z = -F.binary_cross_entropy(loc_img, x, reduction="none").sum(-1)
+
+        return log_px_z
+
 
 class MNISTDecoder(nn.Module):
     def __init__(self, z_dim, hidden_dim=400):

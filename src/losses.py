@@ -38,7 +38,7 @@ def elbo_loss(vae, x, indices):
 
     return loss, recon_loss, kl_div
 
-def elbo_loss_mc(vae, x, indices):
+def elbo_loss_mc(vae, x, indices, kl_multiplier):
     log_qz_x, log_px_z, log_pz, _, _ = vae(x, indices=indices)
 
     # Reconstruction term
@@ -48,7 +48,7 @@ def elbo_loss_mc(vae, x, indices):
     kl_div = (log_qz_x - log_pz).sum(-1)
 
     # ELBO loss
-    loss = recon_loss + kl_div
+    loss = recon_loss + kl_div * kl_multiplier
 
     # Take average across batch
     loss = loss.mean()

@@ -28,7 +28,7 @@ class VAEExperiment(LightningModule):
         self.img_dim = self.datamodule.size()
         # Initialize loss function
         self.loss = getattr(losses, self.hparams["loss"])
-        loss_args = self.hparams['loss_args']
+        loss_args = self.hparams["loss_args"]
         if loss_args:
             self.loss = partial(self.loss, **loss_args)
 
@@ -65,9 +65,16 @@ class VAEExperiment(LightningModule):
             **self.hparams["datamodule_args"]
         )
 
+    def _kl_multiplier(self):
+        multiplier = min(self.global_step / (self.hparams["max_steps"] * 0.1), 1.0,)
+
+        return 0.5 * (1.0 + multiplier)
+
     def _run_step(self, batch):
         _, x, _ = batch
-        loss, recon_loss, kl_div = self.loss(self.vae, x, indices=None)
+        loss, recon_loss, kl_div = self.loss(
+            self.vae, x, indices=None, kl_multiplier=self._kl_multiplier()
+        )
 
         return loss, recon_loss, kl_div
 
@@ -111,7 +118,7 @@ class VAELangevinExperiment(VAEExperiment):
         super().__init__(hparams)
 
     def _init_encoder(self):
-        z_dim = self.hparams['z_dim']
+        z_dim = self.hparams["z_dim"]
         dataset_size = self.datamodule.train_dataset_size
         device = self.device
 
@@ -135,11 +142,11 @@ class VAEFlowExperiment(VAEExperiment):
 
     def _init_encoder(self):
         # VAE + Flow encoder
-        z_dim = self.hparams['z_dim']
+        z_dim = self.hparams["z_dim"]
 
         # Init flow
         flow_args = self.hparams["flow_args"] or {}
-        flow = getattr(nf, self.hparams['flow'])(z_dim, **flow_args)
+        flow = getattr(nf, self.hparams["flow"])(z_dim, **flow_args)
 
         encoder_args = self.hparams["encoder_args"] or {}
         encoder = getattr(encoders, self.hparams["encoder"])(

@@ -6,6 +6,72 @@ import torch.nn.functional as F
 from torch.distributions import Distribution, Normal
 
 from src.mcmc import LangevinMCMC
+from src.models.nns import Encoder
+
+
+class ConvEncoder(nn.Module):
+    def __init__(self, z_dim):
+        super().__init__()
+
+        self.encoder = Encoder(
+            128,
+            z_dim,
+            1,
+            28,
+            28
+        )
+        self.z_dim = z_dim
+
+    def encode(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Encode batch of points into loc and scale of latent dist
+
+        Parameters
+        ----------
+        x : torch.tensor
+            [B, C, H, W], Batch of points
+
+        Returns
+        -------
+        Tuple[torch.tensor, torch.tensor]
+            [B, Z], [B, Z]
+            z_loc,  z_scale
+        """
+        z_loc, z_scale = self.encoder(x)
+
+        return z_loc, z_scale
+
+    def forward(
+        self, x: torch.Tensor, indices=None, K=1
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[Distribution]]:
+        """Forward pass through encoder, returning components required to compute
+        loss functions
+
+        Parameters
+        ----------
+        x : torch.tensor
+            [B, C, H, W], Input points
+        K : int
+            For IWAE
+
+        Returns
+        -------
+        Tuple[torch.tensor, torch.tensor, Distribution]
+            [B,],       [B, Z], [B, Z]
+            log q(z|x), z,      q(z|x)
+        """
+        z_loc, z_scale = self.encode(x)
+
+        qz_x = Normal(z_loc, z_scale)
+
+        if K == 1:
+            z = qz_x.rsample()
+        else:
+            size = torch.Size([K])
+            z = qz_x.rsample(size)
+
+        log_qz_x = qz_x.log_prob(z).sum(-1)
+
+        return log_qz_x, z, qz_x
 
 
 class MNISTEncoder(nn.Module):

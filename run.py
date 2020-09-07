@@ -33,7 +33,7 @@ def main(hparams):
         logger=wandb_logger,
         # reload_dataloaders_every_epoch=False,
         weights_summary="full",
-        max_epochs=hparams["max_epochs"],
+        max_steps=hparams['max_steps'],
         limit_val_batches=0.,
         # gradient_clip_val=0.1
     )

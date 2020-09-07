@@ -3,7 +3,8 @@ seed: 0
 
 experiment: VAEFlowExperiment
 
-max_epochs: 100
+# max_epochs: 100
+max_steps: 150_000
 
 z_dim: 20
 
