@@ -1,7 +1,7 @@
 import torch
-from pytorch_lightning import Callback
 import torchvision
 import wandb
+from pytorch_lightning import Callback
 
 
 class VAEImageSampler(Callback):

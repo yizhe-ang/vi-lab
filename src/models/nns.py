@@ -209,4 +209,3 @@ def conv_encoder(n_outputs: int, dropout_prob=0.0):
         channels_multiplier=16,
         dropout_probability=dropout_prob,
     )
-

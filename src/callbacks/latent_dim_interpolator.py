@@ -1,7 +1,7 @@
 import torch
-from pytorch_lightning.callbacks import Callback
 import torchvision
 import wandb
+from pytorch_lightning.callbacks import Callback
 
 
 class LatentDimInterpolator(Callback):

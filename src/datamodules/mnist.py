@@ -7,13 +7,6 @@ from torchvision import transforms as transform_lib
 from torchvision.datasets import MNIST
 
 
-# class IndexedMNIST(MNIST):
-#     def __getitem__(self, index):
-#         img, target = super().__getitem__(index)
-
-#         return index, img, target
-
-
 class MNISTDataModule(LightningDataModule):
 
     name = "mnist"
@@ -60,15 +53,6 @@ class MNISTDataModule(LightningDataModule):
         self.num_workers = num_workers
         self.normalize = normalize
         self.seed = seed
-
-        # self.train_dataset_size = len(
-        #     IndexedMNIST(
-        #         self.data_dir,
-        #         train=True,
-        #         download=True,
-        #         transform=transform_lib.ToTensor(),
-        #     )
-        # )
 
     @property
     def num_classes(self):

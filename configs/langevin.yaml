@@ -1,25 +1,27 @@
-name: path_deriv
+name: lang_s30_t30_eps0.1
 seed: 0
 
-experiment: VAEExperiment
+experiment: VAELangevinExperiment
 
 max_steps: 150_000
 
 latent_dim: 32
-objective: path_derivative_elbo
+objective: langevin_elbo
 
-datamodule: MNISTDataModule
+datamodule: IndexedMNISTDataModule
 datamodule_args:
   data_dir: data
   batch_size: 256
   val_split: 10_000
-  # num_workers: 0
 
 prior: standard_normal
 prior_args: {}
 
-approx_posterior: cond_diagonal_normal
-approx_posterior_args: {}
+approx_posterior: cond_langevin_diagonal_normal
+approx_posterior_args:
+  s: 30
+  t: 30
+  eps: 0.1
 
 inputs_encoder:
 inputs_encoder_args: {}

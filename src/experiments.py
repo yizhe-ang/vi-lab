@@ -1,14 +1,16 @@
 import pytorch_lightning as pl
+import torch
+from pytorch_lightning.callbacks import LearningRateLogger
 from pytorch_lightning.core.lightning import LightningModule
 from torch import optim
-from pytorch_lightning.callbacks import LearningRateLogger
-import torch
 
 import src.datamodules as datamodules
 import src.models.dists as dists
 import src.models.nns as nns
+import src.objectives as objectives
+from src.callbacks import LatentDimInterpolator, VAEImageSampler
 from src.models.vaes import VariationalAutoencoder
-from src.callbacks import VAEImageSampler, LatentDimInterpolator
+from src.objectives import log_prob_lower_bound
 
 
 class VAEExperiment(LightningModule):
@@ -23,6 +25,8 @@ class VAEExperiment(LightningModule):
         self._init_callbacks()
         # Set-up nn modules according to `hparams`
         self._init_system()
+        # Init objective function
+        self.obj = getattr(objectives, hparams["objective"])
         # Infer img dims
         self.img_dim = self.datamodule.size()
 
@@ -30,9 +34,6 @@ class VAEExperiment(LightningModule):
         # self.example_input_array = torch.randn(32, 1, 28, 28)
 
     def _init_system(self):
-        # HACK
-        torch.set_default_tensor_type('torch.cuda.FloatTensor')
-
         """Set-up nn modules according to `hparams`"""
         latent_dim = self.hparams["latent_dim"]
 
@@ -83,7 +84,7 @@ class VAEExperiment(LightningModule):
 
     def _run_step(self, batch):
         x, _ = batch
-        elbo = self.model.stochastic_elbo(x, kl_multiplier=self._kl_multiplier())
+        elbo = self.obj(self.model, x, kl_multiplier=self._kl_multiplier())
 
         return elbo.mean()
 
@@ -99,14 +100,14 @@ class VAEExperiment(LightningModule):
     def validation_step(self, batch, batch_idx):
         elbo = self._run_step(batch)
 
-        result = pl.EvalResult(checkpoint_on=elbo)
+        result = pl.EvalResult(checkpoint_on=elbo, early_stop_on=elbo)
         result.log_dict({"val_elbo": elbo})
 
         return result
 
     def test_step(self, batch, batch_idx):
         elbo = self._run_step(batch)
-        log_prob = self.model.log_prob_lower_bound(batch[0], num_samples=1000).mean()
+        log_prob = log_prob_lower_bound(self.model, batch[0], num_samples=1000).mean()
 
         result = pl.EvalResult()
         result.log_dict({"test_elbo": elbo, "test_log_prob": log_prob})
@@ -124,7 +125,29 @@ class VAEExperiment(LightningModule):
             "interval": "step",
         }
 
-        return {
-            'optimizer': optimizer,
-            'lr_scheduler': scheduler
-        }
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+
+
+class VAELangevinExperiment(VAEExperiment):
+    def __init__(self, hparams):
+        super().__init__(hparams)
+
+        # HACK
+        self.cached_latents = torch.randn(
+            self.datamodule.train_dataset_size, hparams["latent_dim"]
+        ).cuda()
+
+    def _run_step(self, batch):
+        x, _, indices = batch
+
+        # Get cached samples
+        cached_latents = self.cached_latents[indices]
+
+        elbo, latents = self.obj(
+            self.model, x, cached_latents, kl_multiplier=self._kl_multiplier()
+        )
+
+        # Cache new samples
+        self.cached_latents[indices] = latents.detach().clone()
+
+        return elbo.mean()

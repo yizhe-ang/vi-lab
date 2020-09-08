@@ -8,6 +8,8 @@ import torch.nn as nn
 from nflows.utils import torchutils
 from nflows.distributions import Distribution
 
+from src.utils import set_default_tensor_type
+
 
 class VariationalAutoencoder(nn.Module):
     """Implementation of a standard VAE."""
@@ -43,60 +45,7 @@ class VariationalAutoencoder(nn.Module):
     def forward(self, *args):
         raise RuntimeError("Forward method cannot be called for a VAE object.")
 
-    def stochastic_elbo(
-        self, inputs: torch.Tensor, num_samples=1, kl_multiplier=1, keepdim=False
-    ) -> torch.Tensor:
-        """Calculates an unbiased Monte-Carlo estimate of the evidence lower bound.
-
-        Note: the KL term is also estimated via Monte Carlo
-
-        Parameters
-        ----------
-        inputs : torch.Tensor
-            [B, D]
-        num_samples : int, optional
-            Number of samples to use for the Monte-Carlo estimate, by default 1
-        kl_multiplier : int, optional
-            , by default 1
-        keepdim : bool, optional
-            , by default False
-
-        Returns
-        -------
-        torch.Tensor
-            An ELBO estimate for each input
-            [B, K, D] if keepdim
-            [B] otherwise
-        """
-        # Sample latents and calculate their log prob under the encoder
-        if self.inputs_encoder is None:
-            posterior_context = inputs
-        else:
-            posterior_context = self.inputs_encoder(inputs)
-
-        latents, log_q_z = self.approximate_posterior.sample_and_log_prob(
-            num_samples, context=posterior_context
-        )
-        latents = torchutils.merge_leading_dims(latents, num_dims=2)
-        log_q_z = torchutils.merge_leading_dims(log_q_z, num_dims=2)
-
-        # Compute log prob of latents under the prior
-        log_p_z = self.prior.log_prob(latents)
-
-        # Compute log prob of inputs under the decoder,
-        inputs = torchutils.repeat_rows(inputs, num_reps=num_samples)
-        log_p_x = self.likelihood.log_prob(inputs, context=latents)
-
-        # Compute ELBO
-        elbo = log_p_x + kl_multiplier * (log_p_z - log_q_z)
-        elbo = torchutils.split_leading_dim(elbo, [-1, num_samples])
-
-        if keepdim:
-            return elbo
-        else:
-            return torch.sum(elbo, dim=1) / num_samples  # Average ELBO across samples
-
-    # FIXME What is this exactly? IWAE bound?
+    @set_default_tensor_type(torch.cuda.FloatTensor)
     def log_prob_lower_bound(
         self, inputs: torch.Tensor, num_samples=100
     ) -> torch.Tensor:
@@ -129,6 +78,7 @@ class VariationalAutoencoder(nn.Module):
 
             return torchutils.merge_leading_dims(samples, num_dims=2)
 
+    @set_default_tensor_type(torch.cuda.FloatTensor)
     def sample(self, num_samples: int, mean=False) -> torch.Tensor:
         """z ~ p(z), x ~ p(x|z)
 

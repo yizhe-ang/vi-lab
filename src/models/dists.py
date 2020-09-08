@@ -1,3 +1,5 @@
+import numpy as np
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from nflows import transforms
@@ -13,6 +15,49 @@ from nflows.transforms import Transform
 from nflows.utils import torchutils
 
 from .nns import ConvDecoder, ConvEncoder
+
+
+class ConditionalLangevinDiagonalNormal(ConditionalDiagonalNormal):
+    def __init__(self, shape, s, t, eps, context_encoder=None):
+        super().__init__(shape, context_encoder)
+
+        self.s = s
+        self.t = t
+        self.eps = eps
+
+    def _sample(self, num_samples, context, samples):
+        """Sample using Langevin Dynamics instead"""
+        context_size = context.shape[0]
+
+        # Generate samples
+        samples.requires_grad_()
+
+        for _ in range(self.s):
+            samples = self._step(samples, context, create_graph=False)
+        samples = samples.detach()
+
+        samples.requires_grad_()
+
+        for _ in range(self.t):
+            samples = self._step(samples, context, create_graph=True)
+
+        return samples
+        # return torchutils.split_leading_dim(samples, [context_size, num_samples])
+
+    def _step(self, inputs, context, create_graph):
+        return (
+            inputs
+            + self.eps * self._grad_log_prob(inputs, context, create_graph)
+            + np.sqrt(2 * self.eps) * torch.randn_like(inputs)
+        )
+
+    def _grad_log_prob(self, inputs, context, create_graph):
+        assert inputs.requires_grad, "Taking gradients w.r.t. inputs"
+
+        log_p = self.log_prob(inputs, context).sum()
+        grad = torch.autograd.grad(log_p, inputs, create_graph=create_graph)[0]
+
+        return grad
 
 
 # HELPER TRANSFORMS ############################################################
@@ -88,6 +133,19 @@ def cond_diagonal_normal(n_dim: int, dropout_prob=0.0) -> Distribution:
         dropout_probability=dropout_prob,
     )
     return ConditionalDiagonalNormal(shape=[n_dim], context_encoder=context_encoder)
+
+
+def cond_langevin_diagonal_normal(
+    n_dim: int, s: int, t: int, eps: float, dropout_prob=0.0
+) -> Distribution:
+    context_encoder = ConvEncoder(
+        context_features=n_dim * 2,
+        channels_multiplier=16,
+        dropout_probability=dropout_prob,
+    )
+    return ConditionalLangevinDiagonalNormal(
+        shape=[n_dim], s=s, t=t, eps=eps, context_encoder=context_encoder
+    )
 
 
 def cond_flow(n_dim: int, n_flow_steps=10, dropout_prob=0.0) -> Distribution:

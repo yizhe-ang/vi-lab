@@ -1,22 +1,15 @@
 import argparse
 
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import model_checkpoint
-import torch
 import yaml
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 
 import src.experiments as experiments
 
 
 def main(hparams):
-    # HACK
-    # torch.set_default_tensor_type('torch.cuda.FloatTensor')
-
     pl.seed_everything(hparams["seed"])
-
-    # torch.backends.cudnn.benchmark=False
 
     # Init logger
     wandb_logger = WandbLogger(name=hparams["name"], project="vae-expts",)
@@ -25,31 +18,34 @@ def main(hparams):
     # Init experiment
     exp = getattr(experiments, hparams["experiment"])(hparams)
 
+    # ModelCheckpoint and EarlyStopping callbacks
     model_checkpoint = ModelCheckpoint(
-        monitor='val_elbo',
-        mode='max'
+        mode='max',
+    )
+    early_stop = EarlyStopping(
+        patience=5,
+        mode='max',
     )
 
     # Init trainer
     trainer = pl.Trainer(
+        # fast_dev_run=True,
         deterministic=True,
         benchmark=True,
         callbacks=exp.callbacks,
-        early_stop_callback=False,
         checkpoint_callback=model_checkpoint,
-        # fast_dev_run=True,
+        early_stop_callback=early_stop,
         gpus=1,
         logger=wandb_logger,
-        # reload_dataloaders_every_epoch=False,
         weights_summary="top",
         max_epochs=10_000,
-        max_steps=hparams['max_steps']
-        # limit_val_batches=0.,
+        max_steps=hparams['max_steps'],
+        limit_val_batches=0.,
         # gradient_clip_val=0.1
     )
 
     trainer.fit(exp, exp.datamodule)
-    trainer.test(datamodule=exp.datamodule)
+    # trainer.test(datamodule=exp.datamodule)
 
 
 if __name__ == "__main__":
