@@ -333,10 +333,10 @@ class ProductOfExpertsEncoder(nn.Module):
         super().__init__()
 
         # Init unimodal gaussian dists
-        self.dists = [
+        self.dists = nn.ModuleList([
             ConditionalDiagonalNormal((latent_dim,), context_encoder=e)
             for e in encoders
-        ]
+        ])
 
     def forward(self, xs: List[Optional[torch.Tensor]]):
         """

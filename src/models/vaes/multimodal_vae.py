@@ -14,4 +14,7 @@ class MultimodalVAE(VAE):
     ) -> None:
         super().__init__(prior, approximate_posterior, likelihood, inputs_encoder)
 
+        # List of distributions
+        self.likelihood = nn.ModuleList(self.likelihood)
+
         # FIXME To define helper methods

@@ -20,6 +20,7 @@ from src.utils import set_default_tensor_type
 from nflows.utils import torchutils
 
 
+# FIXME Test this function!!
 @set_default_tensor_type(torch.cuda.FloatTensor)
 def bimodal_elbo(
     model, inputs: List[torch.Tensor], num_samples=1, kl_multiplier=1, keepdim=False
@@ -37,6 +38,8 @@ def bimodal_elbo(
     z_x, log_q_zx_x = model.approximate_posterior.sample_and_log_prob(
         num_samples, context=x_context
     )
+    # z_x: [batch_size, num_samples, Z]
+    z_x = torchutils.merge_leading_dims(z_x, num_dims=2)
     log_p_zx = model.prior.log_prob(z_x)
     kl_x = log_p_zx - log_q_zx_x
 

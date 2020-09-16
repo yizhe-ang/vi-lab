@@ -128,6 +128,10 @@ def standard_flow(n_dim: int, n_flow_steps=10) -> Distribution:
 
 
 # APPROX POSTERIORS ############################################################
+def diagonal_normal(n_dim: int) -> Distribution:
+    return ConditionalDiagonalNormal(shape=[n_dim])
+
+
 def cond_diagonal_normal(n_dim: int, dropout_prob=0.0) -> Distribution:
     context_encoder = ConvEncoder(
         context_features=n_dim * 2,

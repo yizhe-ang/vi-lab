@@ -77,6 +77,8 @@ class VAEExperiment(LightningModule):
         self.datamodule = getattr(datamodules, self.hparams["datamodule"])(
             **self.hparams["datamodule_args"]
         )
+        self.datamodule.prepare_data()
+        self.datamodule.setup()
 
     def _init_callbacks(self):
         self.callbacks = [
@@ -205,6 +207,6 @@ class MultimodalVAEExperiment(VAEExperiment):
 
     def _run_step(self, batch):
         x, y, _ = batch
-        elbo = self.obj(self.model, [x, y], self._kl_multiplier())
+        elbo = self.obj(self.model, [x, y], kl_multiplier=self._kl_multiplier())
 
         return elbo.mean()
