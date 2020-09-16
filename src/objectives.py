@@ -14,9 +14,67 @@ KL Annealing?
 Pathwise derivative
 Dreg
 """
+from typing import List
 import torch
 from src.utils import set_default_tensor_type
 from nflows.utils import torchutils
+
+
+@set_default_tensor_type(torch.cuda.FloatTensor)
+def bimodal_elbo(
+    model, inputs: List[torch.Tensor], num_samples=1, kl_multiplier=1, keepdim=False
+) -> torch.Tensor:
+    # FIXME Add kl and likelihood weights?
+    # FIXME Fix for keepdim
+    # Compute kl analytically?
+
+    x, y = inputs
+    x_likelihood, y_likelihood = model.likelihood
+
+    # Compute unimodal (x) components
+    x_context = model.inputs_encoder([x])
+
+    z_x, log_q_zx_x = model.approximate_posterior.sample_and_log_prob(
+        num_samples, context=x_context
+    )
+    log_p_zx = model.prior.log_prob(z_x)
+    kl_x = log_p_zx - log_q_zx_x
+
+    log_p_x_zx = x_likelihood.log_prob(x, context=z_x)
+
+    elbo_x = log_p_x_zx + kl_x
+
+    # Compute unimodal (y) components
+    y_context = model.inputs_encoder([y])
+
+    z_y, log_q_zy_y = model.approximate_posterior.sample_and_log_prob(
+        num_samples, context=y_context
+    )
+    log_p_zy = model.prior.log_prob(z_y)
+    kl_y = log_p_zy - log_q_zy_y
+
+    log_p_y_zy = y_likelihood.log_prob(y, context=z_y)
+
+    elbo_y = log_p_y_zy + kl_y
+
+    # Compute bimodal components
+    x_y_context = model.inputs_encoder(inputs)
+
+    z, log_q_z_xy = model.approximate_posterior.sample_and_log_prob(
+        num_samples, context=x_y_context
+    )
+    log_q_z_x = model.approximate_posterior.log_prob(z, context=x)
+    log_q_z_y = model.approximate_posterior.log_prob(z, context=y)
+
+    kl_1 = log_q_z_x - log_q_z_xy
+    kl_2 = log_q_z_y - log_q_z_xy
+
+    log_p_x_z = x_likelihood.log_prob(x, context=z)
+    log_p_x_y = y_likelihood.log_prob(y, context=z)
+
+    elbo = log_p_x_z + log_p_x_y + kl_1 + kl_2
+
+    return elbo + elbo_x + elbo_y
 
 
 @set_default_tensor_type(torch.cuda.FloatTensor)
@@ -147,9 +205,7 @@ def langevin_elbo(
     )
     # latents = torchutils.merge_leading_dims(latents, num_dims=2)
 
-    log_q_z = model.approximate_posterior.log_prob(
-        latents, context=posterior_context
-    )
+    log_q_z = model.approximate_posterior.log_prob(latents, context=posterior_context)
     with torch.no_grad():
         print(log_q_z.mean())
 

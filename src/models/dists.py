@@ -1,3 +1,5 @@
+from typing import List
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -151,7 +153,7 @@ def cond_langevin_diagonal_normal(
 def cond_flow(n_dim: int, n_flow_steps=10, dropout_prob=0.0) -> Distribution:
     context_features = n_dim * 2
 
-    # FIXME What is the context encoder here?
+    # To map context features into parameters for gaussian base dist
     context_encoder = nn.Linear(context_features, n_dim * 2)
 
     base_dist = ConditionalDiagonalNormal(
@@ -176,7 +178,29 @@ def cond_flow(n_dim: int, n_flow_steps=10, dropout_prob=0.0) -> Distribution:
 
 
 # LIKELIHOODS ##################################################################
-def cond_indpt_bernoulli(n_dim: int, dropout_prob=0.0):
+def cond_inpt_bernoulli(
+    shape: List[int], latent_dim: int, decoder: nn.Module
+) -> Distribution:
+    """Returns a decoder with a Bernoulli distribution
+
+    Parameters
+    ----------
+    shape : List[int]
+        Output shape
+    latent_dim : int
+    decoder : nn.Module
+        Decoder that maps from latent features to distribution parameters
+
+    Returns
+    -------
+    Distribution
+    """
+    return ConditionalIndependentBernoulli(
+        shape=shape, context_encoder=decoder
+    )
+
+
+def mnist_cond_indpt_bernoulli(n_dim: int, dropout_prob=0.0):
     latent_decoder = ConvDecoder(
         latent_features=n_dim, channels_multiplier=16, dropout_probability=dropout_prob,
     )

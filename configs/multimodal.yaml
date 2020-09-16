@@ -1,0 +1,42 @@
+name: poe
+seed: 0
+
+experiment: MultimodalVAEExperiment
+
+max_steps: 150_000
+
+latent_dim: 32
+objective: bimodal_elbo
+
+datamodule: MNIST_SVHNDataModule
+datamodule_args:
+  data_dir: data
+  batch_size: 256
+  # val_split: 10_000
+  # num_workers: 0
+
+prior: standard_normal
+prior_args: {}
+
+approx_posterior: cond_diagonal_normal
+approx_posterior_args: {}
+
+encoder: [MNISTEncoder, SVHNEncoder]
+encoder_args: [{}, {}]
+
+inputs_encoder: ProductOfExpertsEncoder
+inputs_encoder_args: {}
+
+likelihood: [ConditionalIndependentBernoulli, ConditionalIndependentBernoulli]
+likelihood_args: [{}, {}]
+
+decoder: [MNISTDecoder, SVHNDecoder]
+decoder_args: [{}, {}]
+
+optimizer: Adam
+optimizer_args:
+  lr: 0.0005
+
+kl_warmup_fraction: 0.1
+kl_multiplier_initial: 0.5
+kl_multiplier_max: 1

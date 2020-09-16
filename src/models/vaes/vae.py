@@ -11,7 +11,7 @@ from nflows.distributions import Distribution
 from src.utils import set_default_tensor_type
 
 
-class VariationalAutoencoder(nn.Module):
+class VAE(nn.Module):
     """Implementation of a standard VAE."""
 
     def __init__(
@@ -44,17 +44,6 @@ class VariationalAutoencoder(nn.Module):
 
     def forward(self, *args):
         raise RuntimeError("Forward method cannot be called for a VAE object.")
-
-    @set_default_tensor_type(torch.cuda.FloatTensor)
-    def log_prob_lower_bound(
-        self, inputs: torch.Tensor, num_samples=100
-    ) -> torch.Tensor:
-        elbo = self.stochastic_elbo(inputs, num_samples=num_samples, keepdim=True)
-        log_prob_lower_bound = torch.logsumexp(elbo, dim=1) - torch.log(
-            torch.Tensor([num_samples])
-        )
-
-        return log_prob_lower_bound
 
     def decode(self, latents: torch.Tensor, mean: bool) -> torch.Tensor:
         """x ~ p(x|z)
@@ -113,12 +102,19 @@ class VariationalAutoencoder(nn.Module):
             [B, Z] if num_samples is None,
             [B, K, Z] otherwise
         """
+        if self.inputs_encoder is None:
+            posterior_context = inputs
+        else:
+            posterior_context = self.inputs_encoder(inputs)
+
         if num_samples is None:
-            latents = self.approximate_posterior.sample(num_samples=1, context=inputs)
+            latents = self.approximate_posterior.sample(
+                num_samples=1, context=posterior_context
+            )
             latents = torchutils.merge_leading_dims(latents, num_dims=2)
         else:
             latents = self.approximate_posterior.sample(
-                num_samples=num_samples, context=inputs
+                num_samples=num_samples, context=posterior_context
             )
 
         return latents
