@@ -158,7 +158,7 @@ class VAELangevinExperiment(VAEExperiment):
         cached_latents = self.cached_latents[indices]
 
         elbo, latents = self.obj(
-            self.model, x, cached_latents, kl_multiplier=self._kl_multiplier()
+            self.model, x, cached_latents, kl_multiplier=1.0
         )
 
         # Cache new samples
@@ -207,6 +207,8 @@ class MultimodalVAEExperiment(VAEExperiment):
 
     def _run_step(self, batch):
         x, y, _ = batch
-        elbo = self.obj(self.model, [x, y], kl_multiplier=self._kl_multiplier())
+        elbo = self.obj(
+            self.model, [x, y], [1.0, 1.0], kl_multiplier=self._kl_multiplier()
+        )
 
         return elbo.mean()

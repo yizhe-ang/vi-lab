@@ -19,14 +19,14 @@ prior_args: {}
 
 approx_posterior: cond_langevin_diagonal_normal
 approx_posterior_args:
-  s: 30
-  t: 30
-  eps: 0.1
+  s: 20
+  t: 20
+  eps: 0.13
 
 inputs_encoder:
 inputs_encoder_args: {}
 
-likelihood: cond_indpt_bernoulli
+likelihood: mnist_cond_indpt_bernoulli
 likelihood_args: {}
 
 optimizer: Adam

@@ -16,14 +16,23 @@ Dreg
 """
 from typing import List
 import torch
+import torch.nn as nn
 from src.utils import set_default_tensor_type
 from nflows.utils import torchutils
+from nflows.distributions import Distribution
+from torch.distributions import Normal
 
 
 # FIXME Test this function!!
+# FIXME Any way to vectorize this?
 @set_default_tensor_type(torch.cuda.FloatTensor)
 def bimodal_elbo(
-    model, inputs: List[torch.Tensor], num_samples=1, kl_multiplier=1, keepdim=False
+    model,
+    inputs: List[torch.Tensor],
+    likelihood_weights: List[float],
+    num_samples=1,
+    kl_multiplier=1.0,
+    keepdim=False,
 ) -> torch.Tensor:
     # FIXME Add kl and likelihood weights?
     # FIXME Fix for keepdim
@@ -32,57 +41,48 @@ def bimodal_elbo(
     x, y = inputs
     x_likelihood, y_likelihood = model.likelihood
 
-    # Compute unimodal (x) components
-    x_context = model.inputs_encoder([x])
-
-    z_x, log_q_zx_x = model.approximate_posterior.sample_and_log_prob(
-        num_samples, context=x_context
-    )
-    # z_x: [batch_size, num_samples, Z]
-    z_x = torchutils.merge_leading_dims(z_x, num_dims=2)
-    log_p_zx = model.prior.log_prob(z_x)
-    kl_x = log_p_zx - log_q_zx_x
-
-    log_p_x_zx = x_likelihood.log_prob(x, context=z_x)
-
-    elbo_x = log_p_x_zx + kl_x
-
-    # Compute unimodal (y) components
-    y_context = model.inputs_encoder([y])
-
-    z_y, log_q_zy_y = model.approximate_posterior.sample_and_log_prob(
-        num_samples, context=y_context
-    )
-    log_p_zy = model.prior.log_prob(z_y)
-    kl_y = log_p_zy - log_q_zy_y
-
-    log_p_y_zy = y_likelihood.log_prob(y, context=z_y)
-
-    elbo_y = log_p_y_zy + kl_y
+    # Compute unimodal components
+    elbo_sum, contexts = unimodal_elbos(model, inputs, likelihood_weights)
+    # Parameters for q(z|x) and q(z|y)
+    x_context, y_context = contexts
 
     # Compute bimodal components
-    x_y_context = model.inputs_encoder(inputs)
+    xy_context = model.inputs_encoder(inputs)
 
     z, log_q_z_xy = model.approximate_posterior.sample_and_log_prob(
-        num_samples, context=x_y_context
+        num_samples, context=xy_context
     )
-    log_q_z_x = model.approximate_posterior.log_prob(z, context=x)
-    log_q_z_y = model.approximate_posterior.log_prob(z, context=y)
+    z = torchutils.merge_leading_dims(z, num_dims=2)
+    log_q_z_xy = torchutils.merge_leading_dims(log_q_z_xy, num_dims=2)
 
-    kl_1 = log_q_z_x - log_q_z_xy
-    kl_2 = log_q_z_y - log_q_z_xy
+    # HACK hardcode
+    log_q_z_x = model.approximate_posterior.log_prob(z, context=x_context)
+    log_q_z_y = model.approximate_posterior.log_prob(z, context=y_context)
 
+    kl_1 = log_q_z_xy - log_q_z_x
+    kl_2 = log_q_z_xy - log_q_z_y
+
+    x = torchutils.repeat_rows(x, num_reps=num_samples)
+    y = torchutils.repeat_rows(y, num_reps=num_samples)
     log_p_x_z = x_likelihood.log_prob(x, context=z)
     log_p_x_y = y_likelihood.log_prob(y, context=z)
 
-    elbo = log_p_x_z + log_p_x_y + kl_1 + kl_2
+    # FIXME Minus or plus KL??
+    # FIXME How to weigh these terms?
+    elbo = log_p_x_z + log_p_x_y - kl_1 - kl_2
+    elbo_sum += elbo
 
-    return elbo + elbo_x + elbo_y
+    return elbo_sum
 
 
 @set_default_tensor_type(torch.cuda.FloatTensor)
 def stochastic_elbo(
-    model, inputs: torch.Tensor, num_samples=1, kl_multiplier=1, keepdim=False
+    model: nn.Module,
+    inputs: torch.Tensor,
+    num_samples=1,
+    kl_multiplier=1.0,
+    likelihood_weight=1.0,
+    keepdim=False,
 ) -> torch.Tensor:
     """Calculates an unbiased Monte-Carlo estimate of the evidence lower bound.
 
@@ -90,12 +90,16 @@ def stochastic_elbo(
 
     Parameters
     ----------
+    model : nn.Module
+        VAE model
     inputs : torch.Tensor
         [B, D]
     num_samples : int, optional
         Number of samples to use for the Monte-Carlo estimate, by default 1
-    kl_multiplier : int, optional
-        , by default 1
+    kl_multiplier : float, optional
+        , by default 1.0
+    likelihood_weight: float, optional
+        How much to weigh the reconstruction term, by default 1.0
     keepdim : bool, optional
         , by default False
 
@@ -118,21 +122,76 @@ def stochastic_elbo(
     latents = torchutils.merge_leading_dims(latents, num_dims=2)
     log_q_z = torchutils.merge_leading_dims(log_q_z, num_dims=2)
 
+    with torch.no_grad():
+        print(log_q_z.mean())
+
     # Compute log prob of latents under the prior
     log_p_z = model.prior.log_prob(latents)
 
-    # Compute log prob of inputs under the decoder,
+    # Compute log prob of inputs under the decoder
     inputs = torchutils.repeat_rows(inputs, num_reps=num_samples)
     log_p_x = model.likelihood.log_prob(inputs, context=latents)
 
     # Compute ELBO
-    elbo = log_p_x + kl_multiplier * (log_p_z - log_q_z)
+    elbo = (likelihood_weight * log_p_x) + (kl_multiplier * (log_p_z - log_q_z))
     elbo = torchutils.split_leading_dim(elbo, [-1, num_samples])
+
+    # Examine all components
+    print(f'log q(z|x): {log_q_z.mean()}')
+    print(f'log p(z): {log_p_z.mean()}')
+    print(f'log p(x|z): {log_p_x.mean()}')
 
     if keepdim:
         return elbo
     else:
         return torch.sum(elbo, dim=1) / num_samples  # Average ELBO across samples
+
+
+def unimodal_elbos(
+    model: nn.Module,
+    inputs: torch.Tensor,
+    likelihood_weights=List[float],
+    num_samples=1,
+    kl_multiplier=1.0,
+) -> torch.Tensor:
+
+    batch_size = inputs[0].shape[0]
+
+    # Compute the ELBO for each modality
+    elbo_sum = torch.zeros(batch_size, device=inputs[0].device)
+    # Cache the posterior context of each modality
+    contexts = []
+
+    for i, (x, likelihood, weight) in enumerate(
+        zip(inputs, model.likelihood, likelihood_weights)
+    ):
+        unimodal_inputs = [None] * len(inputs)
+        unimodal_inputs[i] = x
+
+        posterior_context = model.inputs_encoder(unimodal_inputs)
+
+        latents, log_q_z = model.approximate_posterior.sample_and_log_prob(
+            num_samples, context=posterior_context
+        )
+        latents = torchutils.merge_leading_dims(latents, num_dims=2)
+        log_q_z = torchutils.merge_leading_dims(log_q_z, num_dims=2)
+
+        # Compute log prob of latents under the prior
+        log_p_z = model.prior.log_prob(latents)
+
+        # Compute log prob of inputs under the decoder
+        x = torchutils.repeat_rows(x, num_reps=num_samples)
+        log_p_x = likelihood.log_prob(x, context=latents)
+
+        # Compute ELBO
+        elbo = (weight * log_p_x) + (kl_multiplier * (log_p_z - log_q_z))
+        elbo = torchutils.split_leading_dim(elbo, [-1, num_samples])
+
+        # Average across # of samples
+        elbo_sum += elbo.mean(dim=1)
+        contexts.append(posterior_context)
+
+    return elbo_sum, contexts
 
 
 @set_default_tensor_type(torch.cuda.FloatTensor)
@@ -208,7 +267,11 @@ def langevin_elbo(
     )
     # latents = torchutils.merge_leading_dims(latents, num_dims=2)
 
-    log_q_z = model.approximate_posterior.log_prob(latents, context=posterior_context)
+    log_q_z = (
+        model.approximate_posterior.log_prob(latents, context=posterior_context)
+    )
+    # means, log_stds = model.approximate_posterior._compute_params(posterior_context)
+    # log_q_z = Normal(means, log_stds.exp()).log_prob(latents).sum(-1)
     with torch.no_grad():
         print(log_q_z.mean())
 
@@ -219,9 +282,19 @@ def langevin_elbo(
     inputs = torchutils.repeat_rows(inputs, num_reps=num_samples)
     log_p_x = model.likelihood.log_prob(inputs, context=latents)
 
+    # Examine all components
+    print(f'log q(z|x): {log_q_z.mean()}')
+    print(f'log p(z): {log_p_z.mean()}')
+    print(f'log p(x|z): {log_p_x.mean()}')
+
     # Compute ELBO
     elbo = log_p_x + kl_multiplier * (log_p_z - log_q_z)
+
+    # Filter out bad samples
+    # elbo = elbo[log_q_z < -10_000]
+
     elbo = torchutils.split_leading_dim(elbo, [-1, num_samples])
+
 
     if keepdim:
         return elbo, latents

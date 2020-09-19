@@ -1,4 +1,4 @@
-name: path_deriv
+name: test
 seed: 0
 
 experiment: VAEExperiment
@@ -6,7 +6,7 @@ experiment: VAEExperiment
 max_steps: 150_000
 
 latent_dim: 32
-objective: path_derivative_elbo
+objective: stochastic_elbo
 
 datamodule: MNISTDataModule
 datamodule_args:
@@ -24,7 +24,7 @@ approx_posterior_args: {}
 inputs_encoder:
 inputs_encoder_args: {}
 
-likelihood: cond_indpt_bernoulli
+likelihood: mnist_cond_indpt_bernoulli
 likelihood_args: {}
 
 optimizer: Adam

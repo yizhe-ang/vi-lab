@@ -29,7 +29,7 @@ def main(hparams):
 
     # Init trainer
     trainer = pl.Trainer(
-        fast_dev_run=True,
+        # fast_dev_run=True,
         deterministic=True,
         benchmark=True,
         # callbacks=exp.callbacks,

@@ -333,10 +333,12 @@ class ProductOfExpertsEncoder(nn.Module):
         super().__init__()
 
         # Init unimodal gaussian dists
-        self.dists = nn.ModuleList([
-            ConditionalDiagonalNormal((latent_dim,), context_encoder=e)
-            for e in encoders
-        ])
+        self.dists = nn.ModuleList(
+            [
+                ConditionalDiagonalNormal((latent_dim,), context_encoder=e)
+                for e in encoders
+            ]
+        )
 
     def forward(self, xs: List[Optional[torch.Tensor]]):
         """
@@ -344,9 +346,14 @@ class ProductOfExpertsEncoder(nn.Module):
         ----------
         xs : List[Optional[torch.Tensor]]
             An input for each encoder. Allows for missing modalities.
+            E.g. [x, y] or [x, None] or [None, y]
         """
         means = []
         log_stds = []
+
+        assert len(self.dists) == len(
+            xs
+        ), "Number of encoders and inputs must be the same!"
 
         # Compute params for each unimodal dist
         for dist, x in zip(self.dists, xs):
