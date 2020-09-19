@@ -29,10 +29,10 @@ def main(hparams):
 
     # Init trainer
     trainer = pl.Trainer(
-        # fast_dev_run=True,
+        fast_dev_run=True,
         deterministic=True,
         benchmark=True,
-        # callbacks=exp.callbacks,
+        callbacks=exp.callbacks,
         checkpoint_callback=model_checkpoint,
         early_stop_callback=early_stop,
         gpus=1,
@@ -40,12 +40,12 @@ def main(hparams):
         weights_summary="full",
         max_epochs=10_000,
         max_steps=hparams['max_steps'],
-        limit_val_batches=0.,
+        # limit_val_batches=0.,
         # gradient_clip_val=0.1
     )
 
     trainer.fit(exp, exp.datamodule)
-    # trainer.test(datamodule=exp.datamodule)
+    trainer.test(datamodule=exp.datamodule)
 
 
 if __name__ == "__main__":

@@ -2,13 +2,18 @@ import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import LearningRateLogger
 from pytorch_lightning.core.lightning import LightningModule
+import numpy as np
 from torch import optim
 
 import src.datamodules as datamodules
 import src.models.dists as dists
 import src.models.nns as nns
 import src.objectives as objectives
-from src.callbacks import LatentDimInterpolator, VAEImageSampler
+from src.callbacks import (
+    LatentDimInterpolator,
+    MultimodalVAEImageSampler,
+    VAEImageSampler,
+)
 from src.models.vaes import VAE, MultimodalVAE
 from src.objectives import log_prob_lower_bound
 
@@ -157,9 +162,7 @@ class VAELangevinExperiment(VAEExperiment):
         # Get cached samples
         cached_latents = self.cached_latents[indices]
 
-        elbo, latents = self.obj(
-            self.model, x, cached_latents, kl_multiplier=1.0
-        )
+        elbo, latents = self.obj(self.model, x, cached_latents, kl_multiplier=1.0)
 
         # Cache new samples
         self.cached_latents[indices] = latents.detach().clone()
@@ -170,6 +173,12 @@ class VAELangevinExperiment(VAEExperiment):
 class MultimodalVAEExperiment(VAEExperiment):
     def __init__(self, hparams):
         super().__init__(hparams)
+
+        # HACK
+        self.likelihood_weights = (
+            np.prod(self.data_dim[1]) / np.prod(self.data_dim[0]),
+            1.0,
+        )
 
     def _init_model(self, prior, approx_posterior, likelihood, inputs_encoder):
         self.model = MultimodalVAE(prior, approx_posterior, likelihood, inputs_encoder)
@@ -212,3 +221,9 @@ class MultimodalVAEExperiment(VAEExperiment):
         )
 
         return elbo.mean()
+
+    def _init_callbacks(self):
+        self.callbacks = [
+            MultimodalVAEImageSampler(num_samples=64),
+            LearningRateLogger(logging_interval="step"),
+        ]

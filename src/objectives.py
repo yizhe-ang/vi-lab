@@ -14,7 +14,7 @@ KL Annealing?
 Pathwise derivative
 Dreg
 """
-from typing import List
+from typing import List, Union
 import torch
 import torch.nn as nn
 from src.utils import set_default_tensor_type
@@ -26,7 +26,7 @@ from torch.distributions import Normal
 # FIXME Test this function!!
 # FIXME Any way to vectorize this?
 @set_default_tensor_type(torch.cuda.FloatTensor)
-def bimodal_elbo(
+def vaevae_elbo(
     model,
     inputs: List[torch.Tensor],
     likelihood_weights: List[float],
@@ -78,10 +78,10 @@ def bimodal_elbo(
 @set_default_tensor_type(torch.cuda.FloatTensor)
 def stochastic_elbo(
     model: nn.Module,
-    inputs: torch.Tensor,
+    inputs: Union[torch.Tensor, List[torch.Tensor]],
     num_samples=1,
     kl_multiplier=1.0,
-    likelihood_weight=1.0,
+    likelihood_weight: Union[float, List[float]] = 1.0,
     keepdim=False,
 ) -> torch.Tensor:
     """Calculates an unbiased Monte-Carlo estimate of the evidence lower bound.
@@ -92,14 +92,15 @@ def stochastic_elbo(
     ----------
     model : nn.Module
         VAE model
-    inputs : torch.Tensor
-        [B, D]
+    inputs : torch.Tensor | List[torch.Tensor]
+        [B, D], Supports multimodal inputs
     num_samples : int, optional
         Number of samples to use for the Monte-Carlo estimate, by default 1
     kl_multiplier : float, optional
         , by default 1.0
-    likelihood_weight: float, optional
+    likelihood_weight: float | List[float], optional
         How much to weigh the reconstruction term, by default 1.0
+        Supports multimodal inputs
     keepdim : bool, optional
         , by default False
 
@@ -122,24 +123,28 @@ def stochastic_elbo(
     latents = torchutils.merge_leading_dims(latents, num_dims=2)
     log_q_z = torchutils.merge_leading_dims(log_q_z, num_dims=2)
 
-    with torch.no_grad():
-        print(log_q_z.mean())
-
     # Compute log prob of latents under the prior
     log_p_z = model.prior.log_prob(latents)
 
     # Compute log prob of inputs under the decoder
-    inputs = torchutils.repeat_rows(inputs, num_reps=num_samples)
-    log_p_x = model.likelihood.log_prob(inputs, context=latents)
+    # If inputs are multimodal
+    if isinstance(inputs, List):
+        if likelihood_weight == 1.0:
+            likelihood_weight = [1.0] * len(inputs)
+
+        # Compute log prob of inputs under each decoder
+        log_p_x = torch.zeros_like(log_p_z)
+
+        for x, l, w in zip(inputs, model.likelihood, likelihood_weight):
+            x = torchutils.repeat_rows(x, num_reps=num_samples)
+            log_p_x += w * l.log_prob(x, context=latents)
+    else:
+        inputs = torchutils.repeat_rows(inputs, num_reps=num_samples)
+        log_p_x = likelihood_weight * model.likelihood.log_prob(inputs, context=latents)
 
     # Compute ELBO
-    elbo = (likelihood_weight * log_p_x) + (kl_multiplier * (log_p_z - log_q_z))
+    elbo = log_p_x + (kl_multiplier * (log_p_z - log_q_z))
     elbo = torchutils.split_leading_dim(elbo, [-1, num_samples])
-
-    # Examine all components
-    print(f'log q(z|x): {log_q_z.mean()}')
-    print(f'log p(z): {log_p_z.mean()}')
-    print(f'log p(x|z): {log_p_x.mean()}')
 
     if keepdim:
         return elbo
@@ -267,9 +272,7 @@ def langevin_elbo(
     )
     # latents = torchutils.merge_leading_dims(latents, num_dims=2)
 
-    log_q_z = (
-        model.approximate_posterior.log_prob(latents, context=posterior_context)
-    )
+    log_q_z = model.approximate_posterior.log_prob(latents, context=posterior_context)
     # means, log_stds = model.approximate_posterior._compute_params(posterior_context)
     # log_q_z = Normal(means, log_stds.exp()).log_prob(latents).sum(-1)
     with torch.no_grad():
@@ -283,9 +286,9 @@ def langevin_elbo(
     log_p_x = model.likelihood.log_prob(inputs, context=latents)
 
     # Examine all components
-    print(f'log q(z|x): {log_q_z.mean()}')
-    print(f'log p(z): {log_p_z.mean()}')
-    print(f'log p(x|z): {log_p_x.mean()}')
+    print(f"log q(z|x): {log_q_z.mean()}")
+    print(f"log p(z): {log_p_z.mean()}")
+    print(f"log p(x|z): {log_p_x.mean()}")
 
     # Compute ELBO
     elbo = log_p_x + kl_multiplier * (log_p_z - log_q_z)
@@ -294,7 +297,6 @@ def langevin_elbo(
     # elbo = elbo[log_q_z < -10_000]
 
     elbo = torchutils.split_leading_dim(elbo, [-1, num_samples])
-
 
     if keepdim:
         return elbo, latents

@@ -4,7 +4,7 @@ import wandb
 from pytorch_lightning import Callback
 
 
-class VAEImageSampler(Callback):
+class MultimodalVAEImageSampler(Callback):
     def __init__(self, num_samples=64) -> None:
         """Generates images and logs to wandb
 
@@ -16,7 +16,7 @@ class VAEImageSampler(Callback):
         Parameters
         ----------
         num_samples : int, optional
-            , by default 3
+            , by default 64, i.e. 8x8 grid
         """
         super().__init__()
         self.num_samples = num_samples
@@ -28,18 +28,18 @@ class VAEImageSampler(Callback):
             # VAE model
             model = pl_module.model
             # Get samples
-            images = model.sample(self.num_samples, mean=True)
+            samples = model.sample(self.num_samples, mean=True)
 
-            # Create grid
+            # Create grid for each modality
+            for i, s in enumerate(samples):
+                # FIXME Do I need this?
+                # images = images.view(self.num_samples, *pl_module.data_dim)
+                grid = torchvision.utils.make_grid(samples, nrow=8)
+                grid = grid.permute(1, 2, 0).cpu().numpy()
 
-            # FIXME Do I need this?
-            # images = images.view(self.num_samples, *pl_module.data_dim)
-            grid = torchvision.utils.make_grid(images, nrow=8)
-            grid = grid.permute(1, 2, 0).cpu().numpy()
-
-            # Log samples
-            trainer.logger.experiment.log(
-                {"samples": wandb.Image(grid)}, commit=False
-            )
+                # Log samples
+                trainer.logger.experiment.log(
+                    {f"samples_{i}": wandb.Image(grid)}, commit=False
+                )
 
         pl_module.train()

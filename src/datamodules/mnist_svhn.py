@@ -38,13 +38,13 @@ class MNIST_SVHNDataModule(LightningDataModule):
         self,
         data_dir: str,
         batch_size: int = 32,
-        val_split: int = 5000,
+        # val_split: int = 5000,
         num_workers: int = 16,
     ):
         super().__init__()
         self.data_dir = data_dir
         self.batch_size = batch_size
-        self.val_split = val_split
+        # self.val_split = val_split
         self.num_workers = num_workers
 
         self.transform = transform_lib.ToTensor()

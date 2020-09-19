@@ -1,12 +1,12 @@
-name: poe
+name: vaevae
 seed: 0
 
 experiment: MultimodalVAEExperiment
 
 max_steps: 150_000
 
-latent_dim: 32
-objective: bimodal_elbo
+latent_dim: 20
+objective: vaevae_elbo
 
 datamodule: MNIST_SVHNDataModule
 datamodule_args:
