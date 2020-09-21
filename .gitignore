@@ -2,6 +2,7 @@ data/
 toy_example/NOTES.md
 .vscode/
 wandb/
+checkpoints/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -11,7 +11,9 @@ class MNIST_SVHN(Dataset):
     def __init__(self, data_dir, train=True, download=False, transform=None):
         super().__init__()
 
-        self.mnist = MNIST(data_dir, train=train, download=download, transform=transform)
+        self.mnist = MNIST(
+            data_dir, train=train, download=download, transform=transform
+        )
         split = "train" if train else "test"
         self.svhn = SVHN(data_dir, split=split, download=download, transform=transform)
 
@@ -30,7 +32,10 @@ class MNIST_SVHN(Dataset):
     def __getitem__(self, idx):
         idx1, idx2 = self.indices_mnist[idx], self.indices_svhn[idx]
         assert self.mnist[idx1][1] == self.svhn[idx2][1], "Something evil has happened!"
-        return self.mnist[idx1][0], self.svhn[idx2][0], self.svhn[idx2][1]
+
+        return dict(
+            data=[self.mnist[idx1][0], self.svhn[idx2][0]], label=self.svhn[idx2][1]
+        )
 
 
 class MNIST_SVHNDataModule(LightningDataModule):
@@ -64,20 +69,20 @@ class MNIST_SVHNDataModule(LightningDataModule):
             )
 
             # Infer dimension of dataset
-            self.dims = (
-                tuple(self.train_set[0][0].shape),
-                tuple(self.train_set[0][1].shape),
-            )
+            self.dims = [
+                tuple(modality.shape)
+                for modality in self.train_set[0]["data"]
+            ]
 
         if stage == "test" or stage is None:
             # FIXME No separate val / test dataset
             self.test_set = self.val_set
 
             # Infer dimension of dataset
-            self.dims = (
-                tuple(self.test_set[0][0].shape),
-                tuple(self.test_set[0][1].shape),
-            )
+            self.dims = [
+                tuple(modality.shape)
+                for modality in self.test_set[0]["data"]
+            ]
 
     def train_dataloader(self):
         return DataLoader(

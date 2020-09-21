@@ -12,6 +12,7 @@ import src.objectives as objectives
 from src.callbacks import (
     LatentDimInterpolator,
     MultimodalVAEImageSampler,
+    MultimodalVAEReconstructor,
     VAEImageSampler,
 )
 from src.models.vaes import VAE, MultimodalVAE
@@ -215,15 +216,26 @@ class MultimodalVAEExperiment(VAEExperiment):
         )
 
     def _run_step(self, batch):
-        x, y, _ = batch
         elbo = self.obj(
-            self.model, [x, y], [1.0, 1.0], kl_multiplier=self._kl_multiplier()
+            self.model, batch["data"], [1.0, 1.0], kl_multiplier=self._kl_multiplier()
         )
 
         return elbo.mean()
 
+    def test_step(self, batch, batch_idx):
+        elbo = self._run_step(batch)
+        log_prob = log_prob_lower_bound(
+            self.model, batch["data"], num_samples=1000
+        ).mean()
+
+        result = pl.EvalResult()
+        result.log_dict({"test_elbo": elbo, "test_log_prob": log_prob})
+
+        return result
+
     def _init_callbacks(self):
         self.callbacks = [
-            MultimodalVAEImageSampler(num_samples=64),
+            MultimodalVAEImageSampler(),
+            MultimodalVAEReconstructor(self.datamodule.val_set),
             LearningRateLogger(logging_interval="step"),
         ]

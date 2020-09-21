@@ -1,4 +1,4 @@
-name: vaevae
+name: vaevae_test
 seed: 0
 
 experiment: MultimodalVAEExperiment

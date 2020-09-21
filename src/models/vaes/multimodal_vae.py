@@ -31,8 +31,8 @@ class MultimodalVAE(VAE):
 
         Returns
         -------
-        torch.Tensor
-            [n_modalities, B, D]
+        List[torch.Tensor]
+            List[B, D] of length n_modalities
         """
         samples_list = []
 
@@ -46,4 +46,36 @@ class MultimodalVAE(VAE):
 
             samples_list.append(samples)
 
-        return torch.stack(samples_list)
+        return samples_list
+
+    def reconstruct(
+        self, inputs: torch.Tensor, num_samples: int = None, mean=False
+    ) -> torch.Tensor:
+        """Reconstruct given inputs
+
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            [B, D]
+        num_samples : int, optional
+            Number of reconstructions to generate per input
+            If None, only one reconstruction is generated per input,
+            by default None
+        mean : bool, optional
+            Uses the mean of the decoder instead of sampling from it, by default False
+
+        Returns
+        -------
+        torch.Tensor
+            [B, D] if num_samples is None,
+            [B, K, Z] otherwise
+        """
+        latents = self.encode(inputs, num_samples)
+        if num_samples is not None:
+            latents = torchutils.merge_leading_dims(latents, num_dims=2)
+
+        recons = self.decode(latents, mean)
+        if num_samples is not None:
+            recons = torchutils.split_leading_dim(recons, [-1, num_samples])
+
+        return recons

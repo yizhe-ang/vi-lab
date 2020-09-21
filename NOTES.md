@@ -24,3 +24,8 @@ Multimodal ELBO objectives require:
 
 - log p(x|z_x)
 - log p(y|z_y)
+
+# Experiments
+- MNIST
+    - For sanity check
+

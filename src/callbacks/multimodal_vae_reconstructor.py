@@ -2,23 +2,33 @@ import torch
 import torchvision
 import wandb
 from pytorch_lightning import Callback
+from torch.utils.data import Dataset
+import numpy as np
 
 
-class MultimodalVAEImageSampler(Callback):
-    def __init__(self, num_samples=64) -> None:
-        """Generates images and logs to wandb
+class MultimodalVAEReconstructor(Callback):
+    def __init__(self, dataset: Dataset, num_samples=8) -> None:
+        """Generates cross-reconstructions and logs to wandb
 
         Requirements:
+            `pl_module` should have `data_dim` attribute
             `pl_module.model` should have `sample` method implemented,
                 z -> samples
 
         Parameters
         ----------
+        dataset : Dataset
+            Dataset to sample from
         num_samples : int, optional
-            , by default 64, i.e. 8x8 grid
+            , by default 8
         """
         super().__init__()
-        self.num_samples = num_samples
+
+        self.dataset = dataset
+
+        # Choose random samples to reconstruct
+        self.samples_idx = np.random.randint(len(dataset), size=num_samples)
+
 
     def on_epoch_end(self, trainer, pl_module):
         with torch.no_grad():
@@ -31,6 +41,8 @@ class MultimodalVAEImageSampler(Callback):
 
             # Create grid for each modality
             for i, s in enumerate(samples):
+                # FIXME Do I need this?
+                # images = images.view(self.num_samples, *pl_module.data_dim)
                 grid = torchvision.utils.make_grid(s, nrow=8)
                 grid = grid.permute(1, 2, 0).cpu().numpy()
 
