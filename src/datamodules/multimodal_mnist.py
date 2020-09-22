@@ -11,10 +11,10 @@ class MultimodalMNIST(MNIST):
     def __getitem__(self, index):
         img, target = super().__getitem__(index)
 
-        return {"data": [img, target]}
+        return dict(data=[img, target])
 
 
-class MNISTDataModule(LightningDataModule):
+class MultimodalMNISTDataModule(LightningDataModule):
 
     name = "mnist"
 
@@ -73,15 +73,46 @@ class MNISTDataModule(LightningDataModule):
         """
         Saves MNIST files to data_dir
         """
-        MNIST(
+        MultimodalMNIST(
             self.data_dir, train=True, download=True, transform=transform_lib.ToTensor()
         )
-        MNIST(
+        MultimodalMNIST(
             self.data_dir,
             train=False,
             download=True,
             transform=transform_lib.ToTensor(),
         )
+
+    def setup(self, stage=None):
+        # Set dimensions of dataset
+        self.dims = [(1, 28, 28), (1,)]
+
+        # Set likelihood ratio for ELBO
+        self.likelihood_weights = [1.0, 50.0]
+
+        if stage == "fit" or stage is None:
+            dataset = MultimodalMNIST(
+                self.data_dir,
+                train=True,
+                download=False,
+                transform=self._default_transforms(),
+            )
+
+            train_length = len(dataset)
+
+            self.train_set, self.val_set = random_split(
+                dataset,
+                [train_length - self.val_split, self.val_split],
+                generator=torch.Generator().manual_seed(self.seed),
+            )
+
+        if stage == "test" or stage is None:
+            self.test_set = MultimodalMNIST(
+                self.data_dir,
+                train=False,
+                download=False,
+                transform=self._default_transforms(),
+            )
 
     def train_dataloader(self, transforms=None):
         """
@@ -89,26 +120,14 @@ class MNISTDataModule(LightningDataModule):
         Args:
             transforms: custom transforms
         """
-        transforms = transforms or self.train_transforms or self._default_transforms()
-
-        dataset = MNIST(
-            self.data_dir, train=True, download=False, transform=transforms
-        )
-        train_length = len(dataset)
-        dataset_train, _ = random_split(
-            dataset,
-            [train_length - self.val_split, self.val_split],
-            generator=torch.Generator().manual_seed(self.seed),
-        )
-        loader = DataLoader(
-            dataset_train,
+        return DataLoader(
+            self.train_set,
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
             drop_last=True,
             pin_memory=True,
         )
-        return loader
 
     def val_dataloader(self, transforms=None):
         """
@@ -116,25 +135,14 @@ class MNISTDataModule(LightningDataModule):
         Args:
             transforms: custom transforms
         """
-        transforms = transforms or self.val_transforms or self._default_transforms()
-        dataset = MNIST(
-            self.data_dir, train=True, download=True, transform=transforms
-        )
-        train_length = len(dataset)
-        _, dataset_val = random_split(
-            dataset,
-            [train_length - self.val_split, self.val_split],
-            generator=torch.Generator().manual_seed(self.seed),
-        )
-        loader = DataLoader(
-            dataset_val,
+        return DataLoader(
+            self.val_set,
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             drop_last=True,
             pin_memory=True,
         )
-        return loader
 
     def test_dataloader(self, transforms=None):
         """
@@ -142,21 +150,14 @@ class MNISTDataModule(LightningDataModule):
         Args:
             transforms: custom transforms
         """
-        transforms = transforms or self.val_transforms or self._default_transforms()
-
-        dataset = MNIST(
-            self.data_dir, train=False, download=False, transform=transforms
-        )
-        loader = DataLoader(
-            dataset,
-            # batch_size=self.batch_size,
+        return DataLoader(
+            self.test_set,
             batch_size=16,
             shuffle=False,
             num_workers=self.num_workers,
             drop_last=True,
             pin_memory=True,
         )
-        return loader
 
     def _default_transforms(self):
         if self.normalize:

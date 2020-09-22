@@ -48,10 +48,10 @@ class MultimodalVAE(VAE):
 
         return samples_list
 
-    def reconstruct(
+    def cross_reconstruct(
         self, inputs: torch.Tensor, num_samples: int = None, mean=False
     ) -> torch.Tensor:
-        """Reconstruct given inputs
+        """x -> y, y -> x
 
         Parameters
         ----------
@@ -62,7 +62,7 @@ class MultimodalVAE(VAE):
             If None, only one reconstruction is generated per input,
             by default None
         mean : bool, optional
-            Uses the mean of the decoder instead of sampling from it, by default False
+            Uses the mean of the encoder/decoder instead of sampling from it, by default False
 
         Returns
         -------
@@ -70,12 +70,25 @@ class MultimodalVAE(VAE):
             [B, D] if num_samples is None,
             [B, K, Z] otherwise
         """
-        latents = self.encode(inputs, num_samples)
-        if num_samples is not None:
-            latents = torchutils.merge_leading_dims(latents, num_dims=2)
+        # FIXME Only assuming two modalities
+        x, y = inputs
 
-        recons = self.decode(latents, mean)
+        # x -> y
+        x_latents = self.encode([x, None], num_samples, mean)
         if num_samples is not None:
-            recons = torchutils.split_leading_dim(recons, [-1, num_samples])
+            x_latents = torchutils.merge_leading_dims(x_latents, num_dims=2)
 
-        return recons
+        y_recons = self.decode(x_latents, mean)[1]
+        if num_samples is not None:
+            y_recons = torchutils.split_leading_dim(y_recons, [-1, num_samples])
+
+        # y -> x
+        y_latents = self.encode([None, y], num_samples, mean)
+        if num_samples is not None:
+            y_latents = torchutils.merge_leading_dims(y_latents, num_dims=2)
+
+        x_recons = self.decode(y_latents, mean)[0]
+        if num_samples is not None:
+            x_recons = torchutils.split_leading_dim(x_recons, [-1, num_samples])
+
+        return [x_recons, y_recons]

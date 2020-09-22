@@ -3,7 +3,7 @@
 - Can infer from arbitrary number of inputs
     - E.g. q(z|x,y), q(z|x), q(z|y)
 
-
+# Objective
 Multimodal ELBO objectives require:
 
 **Bimodal**
@@ -29,3 +29,14 @@ Multimodal ELBO objectives require:
 - MNIST
     - For sanity check
 
+# Evaluation
+- Likelihoods
+    - log p(x, y)
+    - log p(x)
+    - log p(y)
+
+- Coherence
+    - Joint coherence
+        - z -> x, y
+    - Cross coherence
+        - x -> y, y -> x

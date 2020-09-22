@@ -15,6 +15,7 @@ from nflows.flows import Flow
 from nflows.nn.nets import ResidualNet
 from nflows.transforms import Transform
 from nflows.utils import torchutils
+from torch.distributions import Categorical
 
 from .nns import ConvDecoder, ConvEncoder
 
@@ -182,6 +183,61 @@ def cond_flow(n_dim: int, n_flow_steps=10, dropout_prob=0.0) -> Distribution:
 
 
 # LIKELIHOODS ##################################################################
+class ConditionalCategorical(Distribution):
+    def __init__(self, shape, context_encoder=None):
+        """Constructor.
+        Args:
+            shape: list, tuple or torch.Size, the shape of the input variables.
+            context_encoder: callable or None, encodes the context to the distribution parameters.
+                If None, defaults to the identity function.
+        """
+        super().__init__()
+
+        self._shape = torch.Size(shape)
+
+        if context_encoder is None:
+            self._context_encoder = lambda x: x
+        else:
+            self._context_encoder = context_encoder
+
+    def _compute_params(self, context):
+        """Compute the logits from context."""
+        if context is None:
+            raise ValueError("Context can't be None.")
+
+        logits = self._context_encoder(context)
+        if logits.shape[0] != context.shape[0]:
+            raise RuntimeError(
+                "The batch dimension of the parameters is inconsistent with the input."
+            )
+
+        return logits
+
+    def _log_prob(self, inputs, context):
+        # `inputs` should be a batch of labels, [B,]
+
+        # Compute parameters.
+        logits = self._compute_params(context)
+        assert logits.shape[0] == inputs.shape[0]
+
+        return Categorical(logits=logits).log_prob(inputs)
+
+    def _sample(self, num_samples, context):
+        # Compute parameters.
+        logits = self._compute_params(context)
+
+        samples = Categorical(logits=logits).sample(torch.Size([num_samples]))
+
+        return samples.permute(1, 0)  # [B, K]
+
+    def _mean(self, context):
+        # FIXME
+        # Return most probable class
+        logits = self._compute_params(context)
+
+        return torch.argmax(logits, dim=-1)
+
+
 def cond_inpt_bernoulli(
     shape: List[int], latent_dim: int, decoder: nn.Module
 ) -> Distribution:

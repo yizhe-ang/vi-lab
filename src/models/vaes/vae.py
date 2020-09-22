@@ -86,7 +86,9 @@ class VAE(nn.Module):
 
         return self.decode(latents, mean)
 
-    def encode(self, inputs: torch.Tensor, num_samples: int = None) -> torch.Tensor:
+    def encode(
+        self, inputs: torch.Tensor, num_samples: int = None, mean=False
+    ) -> torch.Tensor:
         """z ~ q(z|x)
 
         Parameters
@@ -95,6 +97,8 @@ class VAE(nn.Module):
             [B, D]
         num_samples : int, optional
             If None, only one latent sample is generated per input, by default None
+        mean : bool, optional
+            Uses the mean of the encoder instead of sampling from it, by default False
 
         Returns
         -------
@@ -108,10 +112,13 @@ class VAE(nn.Module):
             posterior_context = self.inputs_encoder(inputs)
 
         if num_samples is None:
-            latents = self.approximate_posterior.sample(
-                num_samples=1, context=posterior_context
-            )
-            latents = torchutils.merge_leading_dims(latents, num_dims=2)
+            if mean:
+                latents = self.approximate_posterior.mean(context=posterior_context)
+            else:
+                latents = self.approximate_posterior.sample(
+                    num_samples=1, context=posterior_context
+                )
+                latents = torchutils.merge_leading_dims(latents, num_dims=2)
         else:
             latents = self.approximate_posterior.sample(
                 num_samples=num_samples, context=posterior_context

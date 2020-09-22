@@ -1,18 +1,17 @@
-name: vaevae_test
+name: mvae_test
 seed: 0
 
 experiment: MultimodalVAEExperiment
 
 max_steps: 150_000
 
-latent_dim: 20
-objective: vaevae_elbo
+latent_dim: 40
+objective: mvae_elbo
 
-datamodule: MNIST_SVHNDataModule
+datamodule: MultimodalMNISTDataModule
 datamodule_args:
   data_dir: data
   batch_size: 256
-  # val_split: 10_000
   # num_workers: 0
 
 prior: standard_normal
@@ -21,16 +20,16 @@ prior_args: {}
 approx_posterior: diagonal_normal
 approx_posterior_args: {}
 
-encoder: [MNISTEncoder, SVHNEncoder]
+encoder: [MNISTEncoder1, LabelEncoder]
 encoder_args: [{}, {}]
 
 inputs_encoder: ProductOfExpertsEncoder
 inputs_encoder_args: {}
 
-likelihood: [ConditionalIndependentBernoulli, ConditionalIndependentBernoulli]
+likelihood: [ConditionalIndependentBernoulli, ConditionalCategorical]
 likelihood_args: [{}, {}]
 
-decoder: [MNISTDecoder, SVHNDecoder]
+decoder: [MNISTDecoder1, LabelDecoder]
 decoder_args: [{}, {}]
 
 optimizer: Adam

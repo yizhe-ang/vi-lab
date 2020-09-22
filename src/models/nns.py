@@ -16,6 +16,13 @@ from typing import List, Optional, Tuple
 from nflows.distributions import ConditionalDiagonalNormal
 
 
+class Swish(nn.Module):
+    """https://arxiv.org/abs/1710.05941"""
+
+    def forward(self, x):
+        return x * F.sigmoid(x)
+
+
 class ResidualBlock(nn.Module):
     def __init__(
         self,
@@ -216,7 +223,7 @@ class ConvDecoder(nn.Module):
         return outputs
 
 
-class MNISTEncoder(nn.Module):
+class MNISTEncoder2(nn.Module):
     """Simple MNIST encoder with one hidden layer, from MMVAE paper"""
 
     def __init__(self, latent_dim):
@@ -239,7 +246,29 @@ class MNISTEncoder(nn.Module):
         return torch.cat([mean, log_std], dim=-1)
 
 
-class MNISTDecoder(nn.Module):
+class MNISTEncoder1(nn.Module):
+    """Simple MNIST encoder with one hidden layer, from MVAE paper"""
+
+    def __init__(self, latent_dim: int) -> None:
+        super().__init__()
+        self.fc1 = nn.Linear(784, 512)
+        self.fc2 = nn.Linear(512, 512)
+        self.fc31 = nn.Linear(512, latent_dim)
+        self.fc32 = nn.Linear(512, latent_dim)
+        self.swish = Swish()
+
+    def forward(self, x):
+        h = self.swish(self.fc1(x.view(-1, 784)))
+        h = self.swish(self.fc2(h))
+
+        mean = self.fc31(h)
+        log_std = self.fc32(h)
+
+        # [B, latent_dim * 2]
+        return torch.cat([mean, log_std], dim=-1)
+
+
+class MNISTDecoder2(nn.Module):
     """Simple MNIST decoder with one hidden layer, from MMVAE paper"""
 
     def __init__(self, latent_dim):
@@ -254,6 +283,66 @@ class MNISTDecoder(nn.Module):
 
         # FIXME Have to reshape?
         return output.view(-1, 1, 28, 28)
+
+
+class MNISTDecoder1(nn.Module):
+    """Simple MNIST decoder with one hidden layer, from MVAE paper"""
+
+    def __init__(self, latent_dim: int) -> None:
+        super().__init__()
+        self.fc1 = nn.Linear(latent_dim, 512)
+        self.fc2 = nn.Linear(512, 512)
+        self.fc3 = nn.Linear(512, 512)
+        self.fc4 = nn.Linear(512, 784)
+        self.swish = Swish()
+
+    def forward(self, z):
+        h = self.swish(self.fc1(z))
+        h = self.swish(self.fc2(h))
+        h = self.swish(self.fc3(h))
+
+        return self.fc4(h).view(-1, 1, 28, 28)
+
+
+class LabelEncoder(nn.Module):
+    """Label encoder for MNIST, from MVAE paper"""
+
+    def __init__(self, latent_dim):
+        super().__init__()
+        self.fc1 = nn.Embedding(10, 512)
+        self.fc2 = nn.Linear(512, 512)
+        self.fc31 = nn.Linear(512, latent_dim)
+        self.fc32 = nn.Linear(512, latent_dim)
+        self.swish = Swish()
+
+    def forward(self, x):
+        h = self.swish(self.fc1(x))
+        h = self.swish(self.fc2(h))
+
+        mean = self.fc31(h)
+        log_std = self.fc32(h)
+
+        # [B, latent_dim * 2]
+        return torch.cat([mean, log_std], dim=-1)
+
+
+class LabelDecoder(nn.Module):
+    """Label decoder for MNIST, from MVAE paper"""
+
+    def __init__(self, latent_dim):
+        super().__init__()
+        self.fc1 = nn.Linear(latent_dim, 512)
+        self.fc2 = nn.Linear(512, 512)
+        self.fc3 = nn.Linear(512, 512)
+        self.fc4 = nn.Linear(512, 10)
+        self.swish = Swish()
+
+    def forward(self, z):
+        h = self.swish(self.fc1(z))
+        h = self.swish(self.fc2(h))
+        h = self.swish(self.fc3(h))
+
+        return self.fc4(h)
 
 
 class SVHNEncoder(nn.Module):

@@ -42,7 +42,13 @@ def vaevae_elbo(
     x_likelihood, y_likelihood = model.likelihood
 
     # Compute unimodal components
-    elbo_sum, contexts = unimodal_elbos(model, inputs, likelihood_weights)
+    elbo_sum, contexts = unimodal_elbos(
+        model,
+        inputs,
+        likelihood_weights,
+        num_samples=num_samples,
+        kl_multiplier=kl_multiplier,
+    )
     # Parameters for q(z|x) and q(z|y)
     x_context, y_context = contexts
 
@@ -72,7 +78,45 @@ def vaevae_elbo(
     elbo = log_p_x_z + log_p_x_y - kl_1 - kl_2
     elbo_sum += elbo
 
-    return elbo_sum
+    if keepdim:
+        return elbo_sum
+    else:
+        return torch.sum(elbo_sum, dim=1) / num_samples  # Average ELBO across samples
+
+
+@set_default_tensor_type(torch.cuda.FloatTensor)
+def mvae_elbo(
+    model,
+    inputs: List[torch.Tensor],
+    likelihood_weights: List[float],
+    num_samples=1,
+    kl_multiplier=1.0,
+    keepdim=False,
+) -> torch.Tensor:
+    """ELBO(x, y) + ELBO(x) + ELBO(y)"""
+
+    # Marginal ELBOs
+    elbo_sum, _ = unimodal_elbos(
+        model,
+        inputs,
+        likelihood_weights,
+        num_samples=num_samples,
+        kl_multiplier=kl_multiplier,
+    )
+
+    # Joint ELBO
+    elbo_sum += stochastic_elbo(
+        model,
+        inputs,
+        num_samples=num_samples,
+        kl_multiplier=kl_multiplier,
+        likelihood_weight=likelihood_weights,
+    )
+
+    if keepdim:
+        return elbo_sum
+    else:
+        return torch.sum(elbo_sum, dim=1) / num_samples  # Average ELBO across samples
 
 
 @set_default_tensor_type(torch.cuda.FloatTensor)
