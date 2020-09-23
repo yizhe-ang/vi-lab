@@ -1,8 +1,9 @@
+import numpy as np
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import LearningRateLogger
 from pytorch_lightning.core.lightning import LightningModule
-import numpy as np
+from pytorch_lightning.metrics.functional import accuracy
 from torch import optim
 
 import src.datamodules as datamodules
@@ -35,6 +36,11 @@ class VAEExperiment(LightningModule):
         self._init_system()
         # Init objective function
         self.obj = getattr(objectives, hparams["objective"])
+
+        # Maximum number of training steps
+        self.max_steps = (
+            len(self.datamodule.train_dataloader()) * self.hparams["max_epochs"]
+        )
 
         # Have to rework forward calls for this to work
         # self.example_input_array = torch.randn(32, 1, 28, 28)
@@ -95,8 +101,7 @@ class VAEExperiment(LightningModule):
 
     def _kl_multiplier(self):
         multiplier = min(
-            self.global_step
-            / (self.hparams["max_steps"] * self.hparams["kl_warmup_fraction"]),
+            self.global_step / (self.max_steps * self.hparams["kl_warmup_fraction"]),
             1.0,
         )
 
@@ -113,7 +118,10 @@ class VAEExperiment(LightningModule):
         loss = -elbo
 
         result = pl.TrainResult(loss)
-        result.log_dict({"train_loss": loss})
+        result.log_dict({
+            "train_loss": loss,
+            "kl_multiplier": torch.tensor(self._kl_multiplier())
+        })
 
         return result
 
@@ -220,7 +228,10 @@ class MultimodalVAEExperiment(VAEExperiment):
 
     def _run_step(self, batch):
         elbo = self.obj(
-            self.model, batch["data"], self.likelihood_weights, kl_multiplier=self._kl_multiplier()
+            self.model,
+            batch["data"],
+            self.likelihood_weights,
+            kl_multiplier=self._kl_multiplier(),
         )
 
         return elbo.mean()
@@ -230,7 +241,7 @@ class MultimodalVAEExperiment(VAEExperiment):
         log_prob = log_prob_lower_bound(
             self.model, batch["data"], num_samples=1000
         ).mean()
-        acc = self._classification_accuracy(batch['data'])
+        acc = self._classification_accuracy(batch["data"])
 
         result = pl.EvalResult()
         result.log_dict({"test_elbo": elbo, "test_log_prob": log_prob, "test_acc": acc})
@@ -242,7 +253,7 @@ class MultimodalVAEExperiment(VAEExperiment):
         x, y = inputs
         x_recons, y_recons = self.model.cross_reconstruct(inputs, mean=True)
 
-        return (y == y_recons).mean()
+        return accuracy(y_recons, y)
 
     def _init_callbacks(self):
         self.callbacks = [

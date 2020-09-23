@@ -1,9 +1,13 @@
 from typing import List
+
+import torch
 import torch.nn as nn
 from nflows.distributions import Distribution
-from .vae import VAE
-import torch
 from nflows.utils import torchutils
+
+from src.utils import set_default_tensor_type
+
+from .vae import VAE
 
 
 class MultimodalVAE(VAE):
@@ -48,6 +52,7 @@ class MultimodalVAE(VAE):
 
         return samples_list
 
+    @set_default_tensor_type(torch.cuda.FloatTensor)
     def cross_reconstruct(
         self, inputs: torch.Tensor, num_samples: int = None, mean=False
     ) -> torch.Tensor:
@@ -62,7 +67,7 @@ class MultimodalVAE(VAE):
             If None, only one reconstruction is generated per input,
             by default None
         mean : bool, optional
-            Uses the mean of the encoder/decoder instead of sampling from it, by default False
+            Uses the mean of the decoder instead of sampling from it, by default False
 
         Returns
         -------
@@ -74,7 +79,7 @@ class MultimodalVAE(VAE):
         x, y = inputs
 
         # x -> y
-        x_latents = self.encode([x, None], num_samples, mean)
+        x_latents = self.encode([x, None], num_samples)
         if num_samples is not None:
             x_latents = torchutils.merge_leading_dims(x_latents, num_dims=2)
 
@@ -83,7 +88,7 @@ class MultimodalVAE(VAE):
             y_recons = torchutils.split_leading_dim(y_recons, [-1, num_samples])
 
         # y -> x
-        y_latents = self.encode([None, y], num_samples, mean)
+        y_latents = self.encode([None, y], num_samples)
         if num_samples is not None:
             y_latents = torchutils.merge_leading_dims(y_latents, num_dims=2)
 

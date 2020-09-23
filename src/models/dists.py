@@ -182,6 +182,27 @@ def cond_flow(n_dim: int, n_flow_steps=10, dropout_prob=0.0) -> Distribution:
     return Flow(transforms.InverseTransform(transform), base_dist)
 
 
+def flow(n_dim: int, n_flow_steps=10, dropout_prob=0.0) -> Distribution:
+
+    base_dist = ConditionalDiagonalNormal(shape=[n_dim])
+
+    transform = transforms.CompositeTransform(
+        [
+            transforms.CompositeTransform(
+                [
+                    create_lu_linear(n_dim),
+                    create_rq_coupling(n_dim, i, context_features=n_dim * 2),
+                ]
+            )
+            for i in range(n_flow_steps)
+        ]
+    )
+    transform = transforms.CompositeTransform([transform, create_lu_linear(n_dim)])
+
+    # FIXME Why inverse?
+    return Flow(transforms.InverseTransform(transform), base_dist)
+
+
 # LIKELIHOODS ##################################################################
 class ConditionalCategorical(Distribution):
     def __init__(self, shape, context_encoder=None):
@@ -255,9 +276,7 @@ def cond_inpt_bernoulli(
     -------
     Distribution
     """
-    return ConditionalIndependentBernoulli(
-        shape=shape, context_encoder=decoder
-    )
+    return ConditionalIndependentBernoulli(shape=shape, context_encoder=decoder)
 
 
 def mnist_cond_indpt_bernoulli(n_dim: int, dropout_prob=0.0):

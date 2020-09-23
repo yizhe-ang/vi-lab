@@ -32,7 +32,6 @@ def vaevae_elbo(
     likelihood_weights: List[float],
     num_samples=1,
     kl_multiplier=1.0,
-    keepdim=False,
 ) -> torch.Tensor:
     # FIXME Add kl and likelihood weights?
     # FIXME Fix for keepdim
@@ -51,6 +50,7 @@ def vaevae_elbo(
     )
     # Parameters for q(z|x) and q(z|y)
     x_context, y_context = contexts
+    x_weight, y_weight = likelihood_weights
 
     # Compute bimodal components
     xy_context = model.inputs_encoder(inputs)
@@ -75,13 +75,18 @@ def vaevae_elbo(
 
     # FIXME Minus or plus KL??
     # FIXME How to weigh these terms?
-    elbo = log_p_x_z + log_p_x_y - kl_1 - kl_2
+    elbo = (
+        (x_weight * log_p_x_z)
+        + (y_weight * log_p_x_y)
+        - (kl_multiplier * kl_1)
+        - (kl_multiplier * kl_2)
+    )
+    elbo = torchutils.split_leading_dim(elbo, [-1, num_samples])
+    elbo = elbo.mean(dim=1)  # Average across number of samples
+
     elbo_sum += elbo
 
-    if keepdim:
-        return elbo_sum
-    else:
-        return torch.sum(elbo_sum, dim=1) / num_samples  # Average ELBO across samples
+    return elbo_sum
 
 
 @set_default_tensor_type(torch.cuda.FloatTensor)
@@ -91,7 +96,6 @@ def mvae_elbo(
     likelihood_weights: List[float],
     num_samples=1,
     kl_multiplier=1.0,
-    keepdim=False,
 ) -> torch.Tensor:
     """ELBO(x, y) + ELBO(x) + ELBO(y)"""
 
@@ -113,10 +117,7 @@ def mvae_elbo(
         likelihood_weight=likelihood_weights,
     )
 
-    if keepdim:
-        return elbo_sum
-    else:
-        return torch.sum(elbo_sum, dim=1) / num_samples  # Average ELBO across samples
+    return elbo_sum
 
 
 @set_default_tensor_type(torch.cuda.FloatTensor)
@@ -129,6 +130,7 @@ def stochastic_elbo(
     keepdim=False,
 ) -> torch.Tensor:
     """Calculates an unbiased Monte-Carlo estimate of the evidence lower bound.
+    Supports multimodal inputs.
 
     Note: the KL term is also estimated via Monte Carlo
 
@@ -152,7 +154,7 @@ def stochastic_elbo(
     -------
     torch.Tensor
         An ELBO estimate for each input
-        [B, K, D] if keepdim
+        [B, K] if keepdim
         [B] otherwise
     """
     # Sample latents and calculate their log prob under the encoder
@@ -236,7 +238,7 @@ def unimodal_elbos(
         elbo = (weight * log_p_x) + (kl_multiplier * (log_p_z - log_q_z))
         elbo = torchutils.split_leading_dim(elbo, [-1, num_samples])
 
-        # Average across # of samples
+        # Average across number of samples
         elbo_sum += elbo.mean(dim=1)
         contexts.append(posterior_context)
 

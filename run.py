@@ -24,16 +24,18 @@ def main(hparams, resume):
 
     # ModelCheckpoint and EarlyStopping callbacks
     model_checkpoint = ModelCheckpoint(mode="max", save_last=True,)
-    early_stop = EarlyStopping(patience=5, mode="max",)
+    early_stop = EarlyStopping(patience=10, mode="max", verbose=True)
 
     # Init trainer
     checkpoint_dir = Path("checkpoints")
-    checkpoint_path = checkpoint_dir / project_name / hparams["name"] / "checkpoints"
+    checkpoint_path = (
+        checkpoint_dir / project_name / hparams["name"] / "checkpoints" / "last.ckpt"
+    )
 
     trainer = pl.Trainer(
         # fast_dev_run=True,
         default_root_dir=checkpoint_dir,
-        resume_from_checkpoint=checkpoint_path if resume else None,
+        resume_from_checkpoint=str(checkpoint_path) if resume else None,
         deterministic=True,
         benchmark=True,
         callbacks=exp.callbacks,
@@ -41,9 +43,9 @@ def main(hparams, resume):
         early_stop_callback=early_stop,
         gpus=1,
         logger=wandb_logger,
-        weights_summary="full",
-        max_epochs=10_000,
-        max_steps=hparams["max_steps"],
+        weights_summary="top",
+        max_epochs=hparams["max_epochs"],
+        # max_steps=hparams["max_steps"],
         # limit_val_batches=0.,
         # gradient_clip_val=0.1
     )
