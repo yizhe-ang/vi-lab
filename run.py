@@ -24,7 +24,9 @@ def main(hparams, resume):
 
     # ModelCheckpoint and EarlyStopping callbacks
     model_checkpoint = ModelCheckpoint(mode="max", save_last=True,)
-    early_stop = EarlyStopping(patience=10, mode="max", verbose=True)
+    early_stop = EarlyStopping(
+        patience=hparams["earlystop_patience"], mode="max", verbose=True
+    )
 
     # Init trainer
     checkpoint_dir = Path("checkpoints")

@@ -1,0 +1,44 @@
+name: vaevae_postflow_svhn_1
+seed: 0
+
+experiment: MultimodalVAEExperiment
+
+max_epochs: 10
+
+latent_dim: 40
+objective: vaevae_elbo
+
+datamodule: MNIST_SVHNDataModule
+datamodule_args:
+  data_dir: data
+  batch_size: 256
+  # num_workers: 0
+
+prior: standard_normal
+prior_args: {}
+
+approx_posterior: flow
+approx_posterior_args:
+  n_flow_steps: 5
+
+encoder: [MNISTEncoder1, SVHNEncoder]
+encoder_args: [{}, {}]
+
+inputs_encoder: ProductOfExpertsEncoder
+inputs_encoder_args: {}
+
+likelihood: [ConditionalIndependentBernoulli, ConditionalIndependentBernoulli]
+likelihood_args: [{}, {}]
+
+decoder: [MNISTDecoder1, SVHNDecoder]
+decoder_args: [{}, {}]
+
+optimizer: Adam
+optimizer_args:
+  lr: 0.0003
+
+kl_warmup_fraction: 0.3
+kl_multiplier_initial: 0
+kl_multiplier_max: 1
+
+earlystop_patience: 5
