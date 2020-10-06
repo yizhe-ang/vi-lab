@@ -2,7 +2,7 @@ from pathlib import Path
 
 import torch
 from pytorch_lightning import LightningDataModule
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, random_split
 from torchvision import transforms as transform_lib
 from torchvision.datasets import MNIST, SVHN
 
@@ -38,19 +38,27 @@ class MNIST_SVHN(Dataset):
         )
 
 
-class MNIST_SVHNDataModule(LightningDataModule):
+class MNIST_SVHN_DataModule(LightningDataModule):
+    """Paired MNIST - SVHN multimodal dataset.
+
+    Training set size: 1,682,040
+    Test set size: 300,000
+    """
+
     def __init__(
         self,
         data_dir: str,
         batch_size: int = 32,
-        # val_split: int = 5000,
+        val_split: int = 50_000,
         num_workers: int = 16,
+        seed: int = 42,
     ):
         super().__init__()
         self.data_dir = data_dir
         self.batch_size = batch_size
-        # self.val_split = val_split
+        self.val_split = val_split
         self.num_workers = num_workers
+        self.seed = seed
 
         self.transform = transform_lib.ToTensor()
 
@@ -61,28 +69,25 @@ class MNIST_SVHNDataModule(LightningDataModule):
 
     def setup(self, stage=None):
         if stage == "fit" or stage is None:
-            self.train_set = MNIST_SVHN(
-                self.data_dir, train=True, transform=self.transform
+            dataset = MNIST_SVHN(self.data_dir, train=True, transform=self.transform)
+            self.train_set, self.val_set = random_split(
+                dataset,
+                [len(dataset) - self.val_split, self.val_split],
+                generator=torch.Generator().manual_seed(self.seed),
             )
-            self.val_set = MNIST_SVHN(
+
+            # Infer dimension of dataset
+            self.dims = [
+                tuple(modality.shape) for modality in self.train_set[0]["data"]
+            ]
+
+        if stage == "test" or stage is None:
+            self.test_set = MNIST_SVHN(
                 self.data_dir, train=False, transform=self.transform
             )
 
             # Infer dimension of dataset
-            self.dims = [
-                tuple(modality.shape)
-                for modality in self.train_set[0]["data"]
-            ]
-
-        if stage == "test" or stage is None:
-            # FIXME No separate val / test dataset
-            self.test_set = self.val_set
-
-            # Infer dimension of dataset
-            self.dims = [
-                tuple(modality.shape)
-                for modality in self.test_set[0]["data"]
-            ]
+            self.dims = [tuple(modality.shape) for modality in self.test_set[0]["data"]]
 
     def train_dataloader(self):
         return DataLoader(

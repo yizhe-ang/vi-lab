@@ -19,8 +19,6 @@ import torch
 import torch.nn as nn
 from src.utils import set_default_tensor_type
 from nflows.utils import torchutils
-from nflows.distributions import Distribution
-from torch.distributions import Normal
 
 
 # FIXME Test this function!!
@@ -33,8 +31,8 @@ def vaevae_elbo(
     num_samples=1,
     kl_multiplier=1.0,
 ) -> torch.Tensor:
+    # FIXME Get rid of num_samples?
     # FIXME Add kl and likelihood weights?
-    # FIXME Fix for keepdim
     # Compute kl analytically?
 
     x, y = inputs

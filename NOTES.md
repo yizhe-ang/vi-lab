@@ -1,5 +1,9 @@
 # TODO
 - What is the best way to do KL annealing?
+    - Tune the annealing schedule
+
+- Test efficacy of multimodal fusion module
+    - Transformer?
 
 # Architecture
 **Approx Posterior, q(z|x)**
@@ -43,3 +47,10 @@ Multimodal ELBO objectives require:
         - z -> x, y
     - Cross coherence
         - x -> y, y -> x
+
+# Classifier Models
+- MNIST
+    - 99.25% accuracy
+- SVHN
+    - 88.26% accuracy
+    - Train a bit more?

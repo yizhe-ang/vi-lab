@@ -9,11 +9,13 @@ Decoders:
 - Shape of output should correspond to data point,
     - For e.g. reshape to dim of image
 """
+from typing import List, Optional, Tuple
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import List, Optional, Tuple
 from nflows.distributions import ConditionalDiagonalNormal
+from src.models.blocks import MLP
 
 
 class Swish(nn.Module):
@@ -409,7 +411,7 @@ class SVHNDecoder(nn.Module):
 
 
 class ProductOfExpertsEncoder(nn.Module):
-    def __init__(self, latent_dim: int, encoders: List[nn.Module]) -> None:
+    def __init__(self, latent_dim: int, encoders: List[nn.Module]):
         """Composes multiple unimodal encoders into a multimodal encoder
         using Product of Experts (Gaussians).
 
@@ -497,6 +499,154 @@ class ProductOfExpertsEncoder(nn.Module):
         pd_log_stds = torch.log(pd_vars + eps) / 2
 
         return pd_means, pd_log_stds
+
+
+class MultimodalEncoder(nn.Module):
+    def __init__(
+        self, encoders: List[nn.Module], fusion_module: nn.Module
+    ):
+        """Composes multiple unimodal encoders into a multimodal encoder
+        using a fusion module
+
+        Assumes all unimodal encoders encode each modality into a feature
+        vector of the same dim
+
+        Parameters
+        ----------
+        encoders : List[nn.Module]
+            An encoder for each modality
+        fusion_module : nn.Module
+            An encoder that fuses multiple inputs into a single feature vector.
+        """
+        super().__init__()
+
+        self.encoders = nn.ModuleList(encoders)
+        self.fusion_module = fusion_module
+
+    def forward(self, xs: List[Optional[torch.Tensor]]):
+        """
+        Parameters
+        ----------
+        xs : List[Optional[torch.Tensor]]
+            An input for each encoder. Allows for missing modalities.
+            E.g. [x, y] or [x, None] or [None, y]
+        """
+        outputs = []
+
+        # Get output from each encoder
+        for x, encoder in zip(xs, self.encoders):
+            # Ignore for missing modalities
+            if x is None:
+                outputs.append(None)
+
+            else:
+                outputs.append(encoder(x))
+
+        # Perform multimodal fusion
+        return self.fusion_module(outputs)
+
+
+class SetEncoder(MLP):
+    def __init__(
+        self,
+        input_size: int,
+        output_size: int,
+        hidden_units: List[int],
+        activation: str = "ReLU",
+        operator: str = "max",
+    ):
+        """Encoder that is permutation, and cardinality invariant.
+
+        Set of inputs -> Pooling operator -> MLP
+
+        Parameters
+        ----------
+        input_size : int
+            Input dim of each separate input (assumed to be of same size)
+        output_size : int
+        hidden_units : List[int]
+            To specify hidden units of the MLP
+        activation : str, optional
+            Activation function between MLP layers, by default "ReLU"
+        operator: str, optional
+            Set pooling operator, by default "max"
+            One of {"max", "sum", "mean", "min", "median"}
+        """
+        # Set pooling operator
+        def in_lambda(xs: List[Optional[torch.Tensor]]):
+            # Filter out missing inputs
+            x = torch.stack([x for x in xs if x is not None], dim=0)
+
+            if operator == "max":
+                x, _ = x.max(dim=0)
+                return x
+
+            elif operator == "sum":
+                return x.sum(dim=0)
+
+        super().__init__(
+            input_size,
+            output_size,
+            hidden_units=hidden_units,
+            activation=activation,
+            in_lambda=in_lambda,
+        )
+
+
+class ConcatEncoder(MLP):
+    def __init__(
+        self,
+        n_inputs: int,
+        input_size: int,
+        output_size: int,
+        hidden_units: List[int],
+        activation: str = "ReLU",
+    ):
+        """Encoder that performs concat fusion, and handles missing inputs
+        by setting them to zero
+
+        Concat inputs -> MLP
+
+        Parameters
+        ----------
+        n_inputs : int
+            Specify number of inputs / modalities
+        input_size : int
+            Input dim of each separate input (assumed to be of same size)
+        output_size : int
+        hidden_units : List[int]
+            To specify hidden units of the MLP
+        activation : str, optional
+            Activation function between MLP layers, by default "ReLU"
+        """
+        # Concat features; set missing inputs to zero
+        def in_lambda(xs: List[Optional[torch.Tensor]]):
+            # Get sample vector
+            sample = None
+            for x in xs:
+                if x is not None:
+                    sample = x
+                    break
+
+            assert sample is not None, "There should be at least one available input"
+
+            # Replace missing inputs with zeros
+            xs_padded = [
+                (x if x is not None else torch.zeros_like(sample))
+                for x in xs
+            ]
+
+            # Concat along feature dimension
+            return torch.cat(xs_padded, dim=-1)
+
+        super().__init__(
+            # Input layer is D * n_inputs
+            input_size * n_inputs,
+            output_size,
+            hidden_units=hidden_units,
+            activation=activation,
+            in_lambda=in_lambda,
+        )
 
 
 def conv_encoder(n_outputs: int, dropout_prob=0.0):

@@ -47,6 +47,7 @@ def main(hparams, resume):
         logger=wandb_logger,
         weights_summary="top",
         max_epochs=hparams["max_epochs"],
+        val_check_interval=0.25,
         # max_steps=hparams["max_steps"],
         # limit_val_batches=0.,
         # gradient_clip_val=0.1

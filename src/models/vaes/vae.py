@@ -81,6 +81,8 @@ class VAE(nn.Module):
         -------
         torch.Tensor
             [num_samples, D]
+        List[torch.Tensor]
+            List[num_samples, D] of length n_modalities
         """
         latents = self.prior.sample(num_samples)
 

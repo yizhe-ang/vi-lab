@@ -1,17 +1,19 @@
+
 name: vaevae_postflow_svhn_1
 seed: 0
 
-experiment: MultimodalVAEExperiment
+experiment: PoE_MVAE_Experiment
 
 max_epochs: 10
 
-latent_dim: 40
+latent_dim: 20
 objective: vaevae_elbo
 
-datamodule: MNIST_SVHNDataModule
+datamodule: MNIST_SVHN_DataModule
 datamodule_args:
   data_dir: data
   batch_size: 256
+  val_split: 50_000
   # num_workers: 0
 
 prior: standard_normal
@@ -24,8 +26,8 @@ approx_posterior_args:
 encoder: [MNISTEncoder1, SVHNEncoder]
 encoder_args: [{}, {}]
 
-inputs_encoder: ProductOfExpertsEncoder
-inputs_encoder_args: {}
+fusion_module: ConcatEncoder
+fusion_module_args: {}
 
 likelihood: [ConditionalIndependentBernoulli, ConditionalIndependentBernoulli]
 likelihood_args: [{}, {}]
@@ -35,8 +37,9 @@ decoder_args: [{}, {}]
 
 optimizer: Adam
 optimizer_args:
-  lr: 0.0003
+  lr: 0.001
 
+# To tune
 kl_warmup_fraction: 0.3
 kl_multiplier_initial: 0
 kl_multiplier_max: 1

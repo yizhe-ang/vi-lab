@@ -1,9 +1,7 @@
-import numpy as np
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import LearningRateLogger
 from pytorch_lightning.core.lightning import LightningModule
-from pytorch_lightning.metrics.functional import accuracy
 from torch import optim
 
 import src.datamodules as datamodules
@@ -12,15 +10,13 @@ import src.models.nns as nns
 import src.objectives as objectives
 from src.callbacks import (
     LatentDimInterpolator,
-    MultimodalVAEImageSampler,
-    MultimodalVAEReconstructor,
     VAEImageSampler,
 )
-from src.models.vaes import VAE, MultimodalVAE
+from src.models.vaes import VAE
 from src.objectives import log_prob_lower_bound
 
 
-class VAEExperiment(LightningModule):
+class VAE_Experiment(LightningModule):
     def __init__(self, hparams):
         super().__init__()
 
@@ -164,7 +160,7 @@ class VAEExperiment(LightningModule):
         return optimizer
 
 
-class VAELangevinExperiment(VAEExperiment):
+class VAE_LangevinExperiment(VAE_Experiment):
     def __init__(self, hparams):
         super().__init__(hparams)
 
@@ -185,91 +181,3 @@ class VAELangevinExperiment(VAEExperiment):
         self.cached_latents[indices] = latents.detach().clone()
 
         return elbo.mean()
-
-
-class MultimodalVAEExperiment(VAEExperiment):
-    def __init__(self, hparams):
-        super().__init__(hparams)
-
-        # HACK Only for bimodal
-        self.likelihood_weights = (
-            np.prod(self.data_dim[1]) / np.prod(self.data_dim[0]),
-            1.0,
-        )
-        # self.likelihood_weights = self.datamodule.likelihood_weights
-
-    def _init_model(self, prior, approx_posterior, likelihood, inputs_encoder):
-        self.model = MultimodalVAE(prior, approx_posterior, likelihood, inputs_encoder)
-
-    def _get_likelihood(self):
-        # Get shapes of dataset
-        shapes = self.data_dim
-        latent_dim = self.hparams["latent_dim"]
-
-        # Get decoders
-        decoders = [
-            getattr(nns, d)(latent_dim, **args)
-            for d, args in zip(self.hparams["decoder"], self.hparams["decoder_args"])
-        ]
-
-        likelihood = self.hparams["likelihood"]
-        likelihood_args = self.hparams["likelihood_args"]
-
-        return [
-            getattr(dists, l)(s, d, **args)
-            for l, args, s, d in zip(likelihood, likelihood_args, shapes, decoders)
-        ]
-
-    def _get_inputs_encoder(self):
-        latent_dim = self.hparams["latent_dim"]
-
-        encoders = [
-            getattr(nns, e)(latent_dim, **args)
-            for e, args in zip(self.hparams["encoder"], self.hparams["encoder_args"])
-        ]
-
-        return getattr(nns, self.hparams["inputs_encoder"])(
-            latent_dim, encoders, **self.hparams["inputs_encoder_args"]
-        )
-
-    def _run_step(self, batch):
-        elbo = self.obj(
-            self.model,
-            batch["data"],
-            self.likelihood_weights,
-            kl_multiplier=self._kl_multiplier(),
-        )
-
-        return elbo.mean()
-
-    def test_step(self, batch, batch_idx):
-        elbo = self._run_step(batch)
-        log_prob = log_prob_lower_bound(
-            self.model, batch["data"], num_samples=1000
-        ).mean()
-        # acc = self._classification_accuracy(batch["data"])
-
-        result = pl.EvalResult()
-        result.log_dict(
-            {
-                "test_elbo": elbo,
-                "test_log_prob": log_prob,
-                # "test_acc": acc
-            }
-        )
-
-        return result
-
-    # FIXME Helper function
-    def _classification_accuracy(self, inputs):
-        x, y = inputs
-        x_recons, y_recons = self.model.cross_reconstruct(inputs, mean=True)
-
-        return accuracy(y_recons, y)
-
-    def _init_callbacks(self):
-        self.callbacks = [
-            MultimodalVAEImageSampler(include_modality=[True, True]),
-            # MultimodalVAEReconstructor(self.datamodule.val_set),
-            LearningRateLogger(logging_interval="step"),
-        ]

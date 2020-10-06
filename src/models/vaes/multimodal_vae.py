@@ -54,9 +54,11 @@ class MultimodalVAE(VAE):
 
     @set_default_tensor_type(torch.cuda.FloatTensor)
     def cross_reconstruct(
-        self, inputs: torch.Tensor, num_samples: int = None, mean=False
+        self, inputs: List[torch.Tensor], num_samples: int = None, mean=False
     ) -> torch.Tensor:
-        """x -> y, y -> x
+        """
+        x -> z_x -> y,
+        y -> z_y -> x
 
         Parameters
         ----------

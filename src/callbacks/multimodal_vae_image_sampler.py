@@ -6,7 +6,7 @@ import wandb
 from pytorch_lightning import Callback
 
 
-class MultimodalVAEImageSampler(Callback):
+class MultimodalVAE_ImageSampler(Callback):
     def __init__(self, include_modality: List[bool], num_samples=64) -> None:
         """Generates images and logs to wandb
 
