@@ -60,6 +60,8 @@ class MNIST_SVHN_DataModule(LightningDataModule):
         self.num_workers = num_workers
         self.seed = seed
 
+        # Number of class labels for each modality
+        self.n_classes = 10
         self.transform = transform_lib.ToTensor()
 
     def prepare_data(self):

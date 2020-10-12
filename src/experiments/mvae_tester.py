@@ -1,9 +1,10 @@
 from pathlib import Path
 
 import torch
-from src.models.classifiers import LatentClassifier, MNIST_Classifier, SVHN_Classifier
+from src.models.classifiers import MNIST_Classifier, SVHN_Classifier
 
 
+# FIXME Change this into a callback?
 class MVAE_Tester:
     def __init__(self, pl_module):
         # FIXME Ensure desired weights are loaded in pl_module

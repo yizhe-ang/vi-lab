@@ -78,11 +78,11 @@ class MVAE_Experiment(VAE_Experiment):
         return result
 
     # FIXME Helper function
-    def _classification_accuracy(self, inputs):
-        x, y = inputs
-        x_recons, y_recons = self.model.cross_reconstruct(inputs, mean=True)
+    # def _classification_accuracy(self, inputs):
+    #     x, y = inputs
+    #     x_recons, y_recons = self.model.cross_reconstruct(inputs, mean=True)
 
-        return accuracy(y_recons, y)
+    #     return accuracy(y_recons, y)
 
     def _init_callbacks(self):
         self.callbacks = [
