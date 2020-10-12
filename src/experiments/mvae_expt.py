@@ -114,7 +114,6 @@ class Fusion_MVAE_Experiment(MVAE_Experiment):
         ]
 
         fusion_module = getattr(nns, self.hparams['fusion_module'])(
-            n_inputs=2,
             input_size=latent_dim*2,
             output_size=latent_dim*2,
             hidden_units=[latent_dim*2],

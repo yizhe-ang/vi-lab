@@ -1,19 +1,15 @@
 import pytorch_lightning as pl
-import torch
-from pytorch_lightning.callbacks import LearningRateLogger
-from pytorch_lightning.core.lightning import LightningModule
-from torch import optim
-
 import src.datamodules as datamodules
 import src.models.dists as dists
 import src.models.nns as nns
 import src.objectives as objectives
-from src.callbacks import (
-    LatentDimInterpolator,
-    VAEImageSampler,
-)
+import torch
+from pytorch_lightning.callbacks import LearningRateLogger
+from pytorch_lightning.core.lightning import LightningModule
+from src.callbacks import LatentDimInterpolator, VAEImageSampler
 from src.models.vaes import VAE
 from src.objectives import log_prob_lower_bound
+from torch import optim
 
 
 class VAE_Experiment(LightningModule):
@@ -100,10 +96,7 @@ class VAE_Experiment(LightningModule):
         kl_multiplier_initial = self.hparams["kl_multiplier_initial"]
         kl_multiplier_max = self.hparams["kl_multiplier_max"]
 
-        multiplier = min(
-            self.global_step / (self.max_steps * kl_warmup_fraction),
-            1.0,
-        )
+        multiplier = min(self.global_step / (self.max_steps * kl_warmup_fraction), 1.0,)
 
         return (
             kl_multiplier_initial
@@ -146,7 +139,9 @@ class VAE_Experiment(LightningModule):
 
     def configure_optimizers(self):
         optimizer = getattr(optim, self.hparams["optimizer"])(
-            self.model.parameters(), **self.hparams["optimizer_args"]
+            self.model.parameters(),
+            lr=self.hparams["learning_rate"],
+            **self.hparams["optimizer_args"]
         )
         # scheduler = {
         #     "scheduler": optim.lr_scheduler.CosineAnnealingLR(

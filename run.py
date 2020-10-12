@@ -7,6 +7,7 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 
 import src.experiments as experiments
+from src.experiments import MVAE_Tester
 
 
 def main(hparams, resume):
@@ -42,19 +43,23 @@ def main(hparams, resume):
         benchmark=True,
         callbacks=exp.callbacks,
         checkpoint_callback=model_checkpoint,
-        early_stop_callback=early_stop,
+        # Disabling early stopping
+        early_stop_callback=False,
         gpus=1,
         logger=wandb_logger,
         weights_summary="top",
         max_epochs=hparams["max_epochs"],
-        val_check_interval=0.25,
-        # max_steps=hparams["max_steps"],
+        min_epochs=hparams["min_epochs"],
+        # val_check_interval=0.25,
+        # auto_lr_find=True,
         # limit_val_batches=0.,
-        # gradient_clip_val=0.1
     )
 
     trainer.fit(exp, exp.datamodule)
     trainer.test(datamodule=exp.datamodule)
+
+    mvae_tester = MVAE_Tester(exp)
+    mvae_tester.evaluate()
 
 
 if __name__ == "__main__":

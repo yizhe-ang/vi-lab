@@ -5,6 +5,9 @@
 - Test efficacy of multimodal fusion module
     - Transformer?
 
+- Latent classifier evaluation
+- Try learning rate finder?
+
 # Architecture
 **Approx Posterior, q(z|x)**
 - Can infer from arbitrary number of inputs

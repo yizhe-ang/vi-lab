@@ -1,9 +1,10 @@
-from src.models.classifiers import LatentClassifier, SVHN_Classifier, MNIST_Classifier
 from pathlib import Path
+
 import torch
+from src.models.classifiers import LatentClassifier, MNIST_Classifier, SVHN_Classifier
 
 
-class MultimodalVAE_Tester:
+class MVAE_Tester:
     def __init__(self, pl_module):
         # FIXME Ensure desired weights are loaded in pl_module
         self.pl_module = pl_module
@@ -51,9 +52,7 @@ class MultimodalVAE_Tester:
                 )
 
                 # Get cross reconstructions
-                m_recons, s_recons = model.cross_reconstruct(
-                    [mnist, svhn], mean=True
-                )
+                m_recons, s_recons = model.cross_reconstruct([mnist, svhn], mean=True)
 
                 # Get predictions
                 m_preds = self.mnist_net(m_recons).argmax(dim=1)
@@ -64,8 +63,8 @@ class MultimodalVAE_Tester:
                 corr_s += (s_preds == targets).sum().item()
 
         return {
-            'cross_coherence_s_m': corr_m / dataset_size,
-            'cross_coherence_m_s': corr_s / dataset_size
+            "cross_coherence_s_m": corr_m / dataset_size,
+            "cross_coherence_m_s": corr_s / dataset_size,
         }
 
     def joint_coherence(self, n_samples: int = 10_000):
@@ -85,9 +84,7 @@ class MultimodalVAE_Tester:
             # Evaluate correct samples
             corr += (m_preds == s_preds).sum().item()
 
-        return {
-            'joint_coherence': corr / n_samples
-        }
+        return {"joint_coherence": corr / n_samples}
 
     def evaluate(self):
         logger = self.pl_module.logger.experiment

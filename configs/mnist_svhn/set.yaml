@@ -1,7 +1,7 @@
-name: vaevae_ms_2
+name: vaevae_set_postflow_0
 seed: 0
 
-experiment: PoE_MVAE_Experiment
+experiment: Fusion_MVAE_Experiment
 
 max_epochs: 50
 min_epochs: 50
@@ -18,11 +18,17 @@ datamodule_args:
 prior: standard_normal
 prior_args: {}
 
-approx_posterior: diagonal_normal
-approx_posterior_args: {}
+approx_posterior: cond_flow
+approx_posterior_args: {
+  n_flow_steps: 3,
+  n_flow_hidden: 40
+}
 
 encoder: [MNISTEncoder2, SVHNEncoder]
 encoder_args: [{}, {}]
+
+fusion_module: SetEncoder
+fusion_module_args: {}
 
 likelihood: [ConditionalIndependentBernoulli, ConditionalIndependentBernoulli]
 likelihood_args: [{}, {}]

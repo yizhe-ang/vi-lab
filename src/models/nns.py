@@ -596,10 +596,10 @@ class SetEncoder(MLP):
 class ConcatEncoder(MLP):
     def __init__(
         self,
-        n_inputs: int,
         input_size: int,
         output_size: int,
         hidden_units: List[int],
+        n_inputs: int = 2,
         activation: str = "ReLU",
     ):
         """Encoder that performs concat fusion, and handles missing inputs
@@ -609,13 +609,13 @@ class ConcatEncoder(MLP):
 
         Parameters
         ----------
-        n_inputs : int
-            Specify number of inputs / modalities
         input_size : int
             Input dim of each separate input (assumed to be of same size)
         output_size : int
         hidden_units : List[int]
             To specify hidden units of the MLP
+        n_inputs : int
+            Specify number of inputs / modalities
         activation : str, optional
             Activation function between MLP layers, by default "ReLU"
         """

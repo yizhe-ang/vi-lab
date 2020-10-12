@@ -107,6 +107,33 @@ def create_rq_coupling(
     )
 
 
+def create_affine_coupling(
+    n_dim: int,
+    step_index: int,
+    context_features=None,
+    # Hypernet args
+    n_hidden=128,
+    n_transform_blocks=2,
+    dropout_prob=0.0,
+    use_batch_norm=False,
+):
+    transforms.AffineCouplingTransform(
+        mask=torchutils.create_alternating_binary_mask(
+            features=n_dim, even=(step_index % 2 == 0)
+        ),
+        transform_net_create_fn=lambda in_features, out_features: ResidualNet(
+            in_features=in_features,
+            out_features=out_features,
+            hidden_features=n_hidden,
+            context_features=context_features,
+            num_blocks=n_transform_blocks,
+            activation=F.relu,
+            dropout_probability=dropout_prob,
+            use_batch_norm=use_batch_norm,
+        ),
+    )
+
+
 # PRIORS #######################################################################
 def standard_normal(n_dim: int) -> Distribution:
     return StandardNormal((n_dim,))
@@ -155,7 +182,9 @@ def cond_langevin_diagonal_normal(
     )
 
 
-def cond_flow(n_dim: int, n_flow_steps=10, dropout_prob=0.0) -> Distribution:
+def cond_flow(
+    n_dim: int, n_flow_steps=10, n_flow_hidden=128, dropout_prob=0.0
+) -> Distribution:
     context_features = n_dim * 2
 
     # To map context features into parameters for gaussian base dist
@@ -170,7 +199,12 @@ def cond_flow(n_dim: int, n_flow_steps=10, dropout_prob=0.0) -> Distribution:
             transforms.CompositeTransform(
                 [
                     create_lu_linear(n_dim),
-                    create_rq_coupling(n_dim, i, context_features=context_features),
+                    create_rq_coupling(
+                        n_dim,
+                        i,
+                        context_features=context_features,
+                        n_hidden=n_flow_hidden,
+                    ),
                 ]
             )
             for i in range(n_flow_steps)
@@ -182,6 +216,7 @@ def cond_flow(n_dim: int, n_flow_steps=10, dropout_prob=0.0) -> Distribution:
     return Flow(transforms.InverseTransform(transform), base_dist)
 
 
+# For PoE?
 def flow(n_dim: int, n_flow_steps=10, dropout_prob=0.0) -> Distribution:
 
     base_dist = ConditionalDiagonalNormal(shape=[n_dim])
