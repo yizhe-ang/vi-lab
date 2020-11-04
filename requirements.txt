@@ -3,4 +3,4 @@ numpy
 scipy
 pytorch-lightning
 wandb
-nflows
+git+https://github.com/bayesiains/nflows.git

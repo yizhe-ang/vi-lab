@@ -1,4 +1,4 @@
-name: vaevae_set_postflow_0
+name: vaevae_set_postflow_affine_0
 seed: 0
 
 experiment: Fusion_MVAE_Experiment
@@ -19,12 +19,12 @@ prior: standard_normal
 prior_args: {}
 
 approx_posterior: cond_flow
-approx_posterior_args: {
-  n_flow_steps: 3,
+approx_posterior_args:
+  flow_type: affine_coupling
+  n_flow_steps: 5
   n_flow_hidden: 40
-}
 
-encoder: [MNISTEncoder2, SVHNEncoder]
+encoder: [MNISTEncoder1, SVHNEncoder]
 encoder_args: [{}, {}]
 
 fusion_module: SetEncoder
@@ -33,7 +33,7 @@ fusion_module_args: {}
 likelihood: [ConditionalIndependentBernoulli, ConditionalIndependentBernoulli]
 likelihood_args: [{}, {}]
 
-decoder: [MNISTDecoder2, SVHNDecoder]
+decoder: [MNISTDecoder1, SVHNDecoder]
 decoder_args: [{}, {}]
 
 optimizer: Adam

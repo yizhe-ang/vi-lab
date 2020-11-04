@@ -4,7 +4,7 @@ import src.models.dists as dists
 import src.models.nns as nns
 from pytorch_lightning.callbacks import LearningRateLogger
 from pytorch_lightning.metrics.functional import accuracy
-from src.callbacks import MultimodalVAE_ImageSampler
+from src.callbacks import MultimodalVAE_ImageSampler, OnlineLinearProbe
 from src.models.nns import MultimodalEncoder, ProductOfExpertsEncoder
 from src.models.vaes import MultimodalVAE
 from src.objectives import log_prob_lower_bound
@@ -89,6 +89,7 @@ class MVAE_Experiment(VAE_Experiment):
             MultimodalVAE_ImageSampler(include_modality=[True, True]),
             # MultimodalVAEReconstructor(self.datamodule.val_set),
             LearningRateLogger(logging_interval="step"),
+            OnlineLinearProbe(),
         ]
 
 

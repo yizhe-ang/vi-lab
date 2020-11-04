@@ -14,7 +14,7 @@ def main(hparams, resume):
     pl.seed_everything(hparams["seed"])
 
     # Init logger
-    project_name = "vae-expts"
+    project_name = "vae-expt-v2"
     wandb_logger = WandbLogger(
         name=hparams["name"], project=project_name, id=hparams["name"],  # For resuming
     )
@@ -24,7 +24,7 @@ def main(hparams, resume):
     exp = getattr(experiments, hparams["experiment"])(hparams)
 
     # ModelCheckpoint and EarlyStopping callbacks
-    model_checkpoint = ModelCheckpoint(mode="max", save_last=True,)
+    model_checkpoint = ModelCheckpoint(mode="max", save_last=True, monitor='val_elbo')
     early_stop = EarlyStopping(
         patience=hparams["earlystop_patience"], mode="max", verbose=True
     )
@@ -50,10 +50,13 @@ def main(hparams, resume):
         weights_summary="top",
         max_epochs=hparams["max_epochs"],
         min_epochs=hparams["min_epochs"],
+        terminate_on_nan=True,
         # val_check_interval=0.25,
         # auto_lr_find=True,
         # limit_val_batches=0.,
     )
+    # Use learning rate finder
+    # trainer.tune(exp)
 
     trainer.fit(exp, exp.datamodule)
     trainer.test(datamodule=exp.datamodule)

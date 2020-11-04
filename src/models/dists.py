@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Callable
 
 import numpy as np
 import torch
@@ -117,7 +117,7 @@ def create_affine_coupling(
     dropout_prob=0.0,
     use_batch_norm=False,
 ):
-    transforms.AffineCouplingTransform(
+    return transforms.AffineCouplingTransform(
         mask=torchutils.create_alternating_binary_mask(
             features=n_dim, even=(step_index % 2 == 0)
         ),
@@ -134,18 +134,35 @@ def create_affine_coupling(
     )
 
 
+create_flow_dict = {
+    "rq_coupling": create_rq_coupling,
+    "affine_coupling": create_affine_coupling,
+}
+
+
 # PRIORS #######################################################################
 def standard_normal(n_dim: int) -> Distribution:
     return StandardNormal((n_dim,))
 
 
-def standard_flow(n_dim: int, n_flow_steps=10) -> Distribution:
+def standard_flow(
+    n_dim: int, flow_type: str, n_flow_steps=10, n_flow_hidden=128, dropout_prob=0.0
+) -> Distribution:
     """StandardNormal -> LU -> RQ (C) -> ... -> LU"""
+    create_flow = create_flow_dict[flow_type]
+
     base_dist = StandardNormal((n_dim,))
     transform = transforms.CompositeTransform(
         [
             transforms.CompositeTransform(
-                [create_lu_linear(n_dim), create_rq_coupling(n_dim, i)]
+                [
+                    create_lu_linear(n_dim),
+                    create_flow(
+                        n_dim,
+                        i,
+                        n_hidden=n_flow_hidden,
+                    ),
+                ]
             )
             for i in range(n_flow_steps)
         ]
@@ -183,8 +200,10 @@ def cond_langevin_diagonal_normal(
 
 
 def cond_flow(
-    n_dim: int, n_flow_steps=10, n_flow_hidden=128, dropout_prob=0.0
+    n_dim: int, flow_type: str, n_flow_steps=10, n_flow_hidden=128, dropout_prob=0.0
 ) -> Distribution:
+    create_flow = create_flow_dict[flow_type]
+
     context_features = n_dim * 2
 
     # To map context features into parameters for gaussian base dist
@@ -199,7 +218,7 @@ def cond_flow(
             transforms.CompositeTransform(
                 [
                     create_lu_linear(n_dim),
-                    create_rq_coupling(
+                    create_flow(
                         n_dim,
                         i,
                         context_features=context_features,
@@ -316,7 +335,9 @@ def cond_inpt_bernoulli(
 
 def mnist_cond_indpt_bernoulli(n_dim: int, dropout_prob=0.0):
     latent_decoder = ConvDecoder(
-        latent_features=n_dim, channels_multiplier=16, dropout_probability=dropout_prob,
+        latent_features=n_dim,
+        channels_multiplier=16,
+        dropout_probability=dropout_prob,
     )
 
     return ConditionalIndependentBernoulli(

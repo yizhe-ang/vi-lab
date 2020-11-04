@@ -1,11 +1,8 @@
-import math
-
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 from torch import optim
 from pytorch_lightning.metrics.functional import accuracy
-from torch.nn.functional import cross_entropy
 from src.models.blocks import MLP
 from torch.nn import functional as F
 
@@ -34,7 +31,7 @@ class OnlineLinearProbe(pl.Callback):
         # Create linear probes for each modality, and joint modalities
         linear_probes = [
             MLP(self.latent_dim, self.n_classes)
-            for _ in range(n_modalities) + 1
+            for _ in range(n_modalities + 1)
         ]
         pl_module.linear_probes = nn.ModuleList(linear_probes).to(pl_module.device)
 

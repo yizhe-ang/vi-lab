@@ -54,6 +54,12 @@ class VAE_Experiment(LightningModule):
 
         self._init_model(prior, approx_posterior, likelihood, inputs_encoder)
 
+        # Print number of parameters in model
+        n_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        print("#####################################")
+        print(f"Total Number of Model Parameters: {n_parameters}")
+        # self.log("n_parameters", n_parameters, on_epoch=False, prog_bar=False)
+
     def _init_model(self, prior, approx_posterior, likelihood, inputs_encoder):
         self.model = VAE(
             prior=prior,
@@ -113,31 +119,27 @@ class VAE_Experiment(LightningModule):
         elbo = self._run_step(batch)
         loss = -elbo
 
-        result = pl.TrainResult(loss)
-        result.log_dict(
+        self.log_dict(
             {"train_loss": loss, "kl_multiplier": torch.tensor(self._kl_multiplier())}
         )
 
-        return result
+        return loss
 
     def validation_step(self, batch, batch_idx):
         elbo = self._run_step(batch)
 
-        result = pl.EvalResult(checkpoint_on=elbo, early_stop_on=elbo)
-        result.log_dict({"val_elbo": elbo})
-
-        return result
+        self.log_dict({"val_elbo": elbo})
 
     def test_step(self, batch, batch_idx):
         elbo = self._run_step(batch)
         log_prob = log_prob_lower_bound(self.model, batch[0], num_samples=1000).mean()
 
-        result = pl.EvalResult()
-        result.log_dict({"test_elbo": elbo, "test_log_prob": log_prob})
-
-        return result
+        self.log_dict({"test_elbo": elbo, "test_log_prob": log_prob})
 
     def configure_optimizers(self):
+        # print("#####################################")
+        # print(self.hparams['learning_rate'])
+
         optimizer = getattr(optim, self.hparams["optimizer"])(
             self.model.parameters(),
             lr=self.hparams["learning_rate"],
