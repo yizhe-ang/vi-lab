@@ -1,2 +1,3 @@
 from .vae import VAE
-from .multimodal_vae import MultimodalVAE
+from .mvae import MultimodalVAE
+from .pmvae import PartitionedMultimodalVAE

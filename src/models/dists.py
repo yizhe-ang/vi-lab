@@ -17,7 +17,15 @@ from nflows.transforms import Transform
 from nflows.utils import torchutils
 from torch.distributions import Categorical
 
-from .nns import ConvDecoder, ConvEncoder
+from src.models.base import ConvDecoder, ConvEncoder
+
+__all__ = [
+    "standard_normal",
+    "standard_flow",
+    "diagonal_normal",
+    "cond_flow",
+    "ConditionalIndependentBernoulli"
+]
 
 
 class ConditionalLangevinDiagonalNormal(ConditionalDiagonalNormal):

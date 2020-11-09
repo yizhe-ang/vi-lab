@@ -23,7 +23,7 @@ class MultimodalVAE(VAE):
         # List of decoder distributions
         self.likelihood = nn.ModuleList(self.likelihood)
 
-    def decode(self, latents: torch.Tensor, mean: bool) -> torch.Tensor:
+    def decode(self, latents: torch.Tensor, mean: bool) -> List[torch.Tensor]:
         """x ~ p(x|z) for each modality
 
         Parameters
@@ -75,7 +75,7 @@ class MultimodalVAE(VAE):
         -------
         torch.Tensor
             [B, D] if num_samples is None,
-            [B, K, Z] otherwise
+            [B, K, D] otherwise
         """
         # FIXME Only assuming two modalities
         x, y = inputs

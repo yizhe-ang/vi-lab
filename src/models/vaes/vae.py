@@ -143,7 +143,7 @@ class VAE(nn.Module):
         -------
         torch.Tensor
             [B, D] if num_samples is None,
-            [B, K, Z] otherwise
+            [B, K, D] otherwise
         """
         latents = self.encode(inputs, num_samples)
         if num_samples is not None:

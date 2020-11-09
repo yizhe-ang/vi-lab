@@ -1,15 +1,12 @@
-import pytorch_lightning as pl
-import src.datamodules as datamodules
-import src.models.dists as dists
-import src.models.nns as nns
+from src.utils import ConfigManager
 import src.objectives as objectives
 import torch
-from pytorch_lightning.callbacks import LearningRateLogger
+from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.core.lightning import LightningModule
 from src.callbacks import LatentDimInterpolator, VAEImageSampler
 from src.models.vaes import VAE
 from src.objectives import log_prob_lower_bound
-from torch import optim
+from src.utils import ConfigManager
 
 
 class VAE_Experiment(LightningModule):
@@ -18,12 +15,15 @@ class VAE_Experiment(LightningModule):
 
         # Create `hparams` attribute
         self.save_hyperparameters(hparams)
+        self.config = ConfigManager(hparams)
+
         # Initialize datamodule
         self._init_datamodule()
         # Infer dataset shapes
         self.data_dim = self.datamodule.size()
         # Initialize callbacks
         self._init_callbacks()
+
         # Set-up nn modules according to `hparams`
         self._init_system()
         # Init objective function
@@ -34,31 +34,37 @@ class VAE_Experiment(LightningModule):
             len(self.datamodule.train_dataloader()) * self.hparams["max_epochs"]
         )
 
+        # Print number of parameters in model
+        n_parameters = sum(
+            p.numel() for p in self.model.parameters() if p.requires_grad
+        )
+        print("#####################################")
+        print(f"Total Number of Model Parameters: {n_parameters}")
+        # FIXME How to log from here?
+        self.log(
+            "n_parameters", n_parameters, on_step=True, on_epoch=False, prog_bar=False
+        )
+
         # Have to rework forward calls for this to work
         # self.example_input_array = torch.randn(32, 1, 28, 28)
+
+    def _init_datamodule(self):
+        self.datamodule = self.config.init_object("datamodule")
+        self.datamodule.prepare_data()
+        self.datamodule.setup()
 
     def _init_system(self):
         """Set-up nn modules according to `hparams`"""
         latent_dim = self.hparams["latent_dim"]
 
-        prior = getattr(dists, self.hparams["prior"])(
-            latent_dim, **self.hparams["prior_args"]
-        )
+        prior = self.config.init_object("prior", latent_dim)
+        approx_posterior = self.config.init_object("approx_posterior", latent_dim)
 
-        approx_posterior = getattr(dists, self.hparams["approx_posterior"])(
-            latent_dim, **self.hparams["approx_posterior_args"]
-        )
         inputs_encoder = self._get_inputs_encoder()
 
         likelihood = self._get_likelihood()
 
         self._init_model(prior, approx_posterior, likelihood, inputs_encoder)
-
-        # Print number of parameters in model
-        n_parameters = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        print("#####################################")
-        print(f"Total Number of Model Parameters: {n_parameters}")
-        # self.log("n_parameters", n_parameters, on_epoch=False, prog_bar=False)
 
     def _init_model(self, prior, approx_posterior, likelihood, inputs_encoder):
         self.model = VAE(
@@ -69,32 +75,16 @@ class VAE_Experiment(LightningModule):
         )
 
     def _get_likelihood(self):
-        return getattr(dists, self.hparams["likelihood"])(
-            self.hparams["latent_dim"], **self.hparams["likelihood_args"]
-        )
+        return self.config.init_object("likelihood", self.hparams["latent_dim"])
 
     def _get_inputs_encoder(self):
-        if self.hparams["inputs_encoder"]:
-            inputs_encoder = getattr(nns, self.hparams["inputs_encoder"])(
-                self.hparams["latent_dim * 2"], **self.hparams["inputs_encoder_args"]
-            )
-        else:
-            inputs_encoder = None
-
-        return inputs_encoder
-
-    def _init_datamodule(self):
-        self.datamodule = getattr(datamodules, self.hparams["datamodule"])(
-            **self.hparams["datamodule_args"]
-        )
-        self.datamodule.prepare_data()
-        self.datamodule.setup()
+        return self.config.init_object("inputs_encoder", self.hparams["latent_dim"] * 2)
 
     def _init_callbacks(self):
         self.callbacks = [
             VAEImageSampler(num_samples=64),
             LatentDimInterpolator(),
-            LearningRateLogger(logging_interval="step"),
+            LearningRateMonitor(logging_interval="step"),
         ]
 
     def _kl_multiplier(self):
@@ -137,14 +127,6 @@ class VAE_Experiment(LightningModule):
         self.log_dict({"test_elbo": elbo, "test_log_prob": log_prob})
 
     def configure_optimizers(self):
-        # print("#####################################")
-        # print(self.hparams['learning_rate'])
-
-        optimizer = getattr(optim, self.hparams["optimizer"])(
-            self.model.parameters(),
-            lr=self.hparams["learning_rate"],
-            **self.hparams["optimizer_args"]
-        )
         # scheduler = {
         #     "scheduler": optim.lr_scheduler.CosineAnnealingLR(
         #         optimizer, T_max=self.hparams["max_steps"], eta_min=0
@@ -154,7 +136,7 @@ class VAE_Experiment(LightningModule):
 
         # return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
-        return optimizer
+        return self.config.init_object("optimizer", self.model.parameters())
 
 
 class VAE_LangevinExperiment(VAE_Experiment):

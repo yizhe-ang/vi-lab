@@ -3,12 +3,12 @@ import torch
 import torch.nn as nn
 from torch import optim
 from pytorch_lightning.metrics.functional import accuracy
-from src.models.blocks import MLP
+from src.models.base import MLP
 from torch.nn import functional as F
 
 
 class OnlineLinearProbe(pl.Callback):
-    def __init__(self):
+    def __init__(self, partitioned=False):
         """
         Attaches a MLP for finetuning as per the standard self-supervised protocol,
         for MVAE
@@ -18,21 +18,41 @@ class OnlineLinearProbe(pl.Callback):
             pl_module.datamodule.n_classes
         """
         super().__init__()
+        self.partitioned = partitioned  # If latent space is partitioned
         # To be set
         self.optimizer = None
-        self.latent_dim = None
         self.n_classes = None  # Number of classes for each modality
 
+    def _concat_latents(self, latents):
+        # For partitioned latents
+        m_latents = latents["m"]
+        s_latent = latents["s"]
+
+        return torch.cat([l for l in m_latents if l is not None] + [s_latent], dim=-1)
+
     def on_pretrain_routine_start(self, trainer, pl_module):
-        self.latent_dim = pl_module.hparams["latent_dim"]
         self.n_classes = pl_module.datamodule.n_classes
         n_modalities = len(pl_module.datamodule.dims)
 
-        # Create linear probes for each modality, and joint modalities
-        linear_probes = [
-            MLP(self.latent_dim, self.n_classes)
-            for _ in range(n_modalities + 1)
-        ]
+        if not self.partitioned:
+            self.latent_dim = pl_module.hparams["latent_dim"]
+            # Create linear probes for each modality, and joint modalities
+            linear_probes = [
+                MLP(self.latent_dim, self.n_classes) for _ in range(n_modalities + 1)
+            ]
+
+        else:
+            self.m_latent_dim = pl_module.hparams["m_latent_dim"]
+            self.s_latent_dim = pl_module.hparams["s_latent_dim"]
+
+            # Create linear probes for each modality, and joint modalities
+            # FIXME To include modality-specific latent?
+            linear_probes = [
+                MLP(self.m_latent_dim + self.s_latent_dim, self.n_classes),
+                MLP(self.m_latent_dim + self.s_latent_dim, self.n_classes),
+                MLP(self.m_latent_dim * 2 + self.s_latent_dim, self.n_classes),
+            ]
+
         pl_module.linear_probes = nn.ModuleList(linear_probes).to(pl_module.device)
 
         # Init optimizer
@@ -43,14 +63,20 @@ class OnlineLinearProbe(pl.Callback):
 
         # Get latent representations from MVAE,
         # conditioned on all combination of modalities
-        return [model.encode(data) for data in [[x1, None], [None, x2], [x1, x2]]]
+        if not self.partitioned:
+            return [model.encode(data) for data in [[x1, None], [None, x2], [x1, x2]]]
+        else:
+            return [
+                self._concat_latents(model.encode(data))
+                for data in [[x1, None], [None, x2], [x1, x2]]
+            ]
 
     def on_train_batch_end(self, trainer, pl_module, batch, batch_idx, dataloader_idx):
         device = pl_module.device
 
         # Get data
         x1, x2 = [x.to(device) for x in batch["data"]]
-        labels = batch['label'].to(device)
+        labels = batch["label"].to(device)
 
         with torch.no_grad():
             representations = self.get_representations(pl_module, x1, x2)
@@ -69,12 +95,66 @@ class OnlineLinearProbe(pl.Callback):
         self.optimizer.zero_grad()
 
         # Log metrics
-        logger = pl_module.logger.experiment
-
         accs = [accuracy(p, labels) for p in preds]
+
         metrics = {
             "train_m_probe": accs[0],
             "train_s_probe": accs[1],
             "train_m_s_probe": accs[2],
         }
-        logger.log(metrics, commit=False)
+        # logger = pl_module.logger.experiment
+        # logger.log(metrics, commit=False)
+
+        pl_module.log_dict(metrics, on_step=True, on_epoch=False, prog_bar=False)
+
+    def on_validation_batch_end(
+        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx
+    ):
+        device = pl_module.device
+
+        # Get data
+        x1, x2 = [x.to(device) for x in batch["data"]]
+        labels = batch["label"].to(device)
+
+        with torch.no_grad():
+            representations = self.get_representations(pl_module, x1, x2)
+
+        # Forward pass through all respective linear probes
+        preds = [probe(z) for z, probe in zip(representations, pl_module.linear_probes)]
+
+        # Log metrics
+        accs = [accuracy(p, labels) for p in preds]
+
+        metrics = {
+            "val_m_probe": accs[0],
+            "val_s_probe": accs[1],
+            "val_m_s_probe": accs[2],
+        }
+
+        pl_module.log_dict(metrics, on_step=False, on_epoch=True, prog_bar=False)
+
+    def on_test_batch_end(
+        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx
+    ):
+        device = pl_module.device
+
+        # Get data
+        x1, x2 = [x.to(device) for x in batch["data"]]
+        labels = batch["label"].to(device)
+
+        with torch.no_grad():
+            representations = self.get_representations(pl_module, x1, x2)
+
+        # Forward pass through all respective linear probes
+        preds = [probe(z) for z, probe in zip(representations, pl_module.linear_probes)]
+
+        # Log metrics
+        accs = [accuracy(p, labels) for p in preds]
+
+        metrics = {
+            "test_m_probe": accs[0],
+            "test_s_probe": accs[1],
+            "test_m_s_probe": accs[2],
+        }
+
+        pl_module.log_dict(metrics, on_step=False, on_epoch=True, prog_bar=False)

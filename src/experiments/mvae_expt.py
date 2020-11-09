@@ -1,11 +1,7 @@
 import numpy as np
-import pytorch_lightning as pl
-import src.models.dists as dists
-import src.models.nns as nns
-from pytorch_lightning.callbacks import LearningRateLogger
-from pytorch_lightning.metrics.functional import accuracy
+from pytorch_lightning.callbacks import LearningRateMonitor
 from src.callbacks import MultimodalVAE_ImageSampler, OnlineLinearProbe
-from src.models.nns import MultimodalEncoder, ProductOfExpertsEncoder
+from src.models import MultimodalEncoder, ProductOfExpertsEncoder
 from src.models.vaes import MultimodalVAE
 from src.objectives import log_prob_lower_bound
 
@@ -32,18 +28,9 @@ class MVAE_Experiment(VAE_Experiment):
         latent_dim = self.hparams["latent_dim"]
 
         # Get decoders
-        decoders = [
-            getattr(nns, d)(latent_dim, **args)
-            for d, args in zip(self.hparams["decoder"], self.hparams["decoder_args"])
-        ]
+        decoders = self.config.init_objects("decoder", latent_dim)
 
-        likelihood = self.hparams["likelihood"]
-        likelihood_args = self.hparams["likelihood_args"]
-
-        return [
-            getattr(dists, l)(s, d, **args)
-            for l, args, s, d in zip(likelihood, likelihood_args, shapes, decoders)
-        ]
+        return self.config.init_objects("likelihood", shapes, decoders)
 
     def _get_inputs_encoder(self):
         raise NotImplementedError
@@ -66,16 +53,13 @@ class MVAE_Experiment(VAE_Experiment):
         ).mean()
         # acc = self._classification_accuracy(batch["data"])
 
-        result = pl.EvalResult()
-        result.log_dict(
+        self.log_dict(
             {
                 "test_elbo": elbo,
                 "test_log_prob": log_prob,
                 # "test_acc": acc
             }
         )
-
-        return result
 
     # FIXME Helper function
     # def _classification_accuracy(self, inputs):
@@ -88,7 +72,7 @@ class MVAE_Experiment(VAE_Experiment):
         self.callbacks = [
             MultimodalVAE_ImageSampler(include_modality=[True, True]),
             # MultimodalVAEReconstructor(self.datamodule.val_set),
-            LearningRateLogger(logging_interval="step"),
+            LearningRateMonitor(logging_interval="step"),
             OnlineLinearProbe(),
         ]
 
@@ -97,10 +81,7 @@ class PoE_MVAE_Experiment(MVAE_Experiment):
     def _get_inputs_encoder(self):
         latent_dim = self.hparams["latent_dim"]
 
-        encoders = [
-            getattr(nns, e)(latent_dim, **args)
-            for e, args in zip(self.hparams["encoder"], self.hparams["encoder_args"])
-        ]
+        encoders = self.config.init_objects("encoder", latent_dim)
 
         return ProductOfExpertsEncoder(latent_dim, encoders)
 
@@ -109,12 +90,9 @@ class Fusion_MVAE_Experiment(MVAE_Experiment):
     def _get_inputs_encoder(self):
         latent_dim = self.hparams["latent_dim"]
 
-        encoders = [
-            getattr(nns, e)(latent_dim, **args)
-            for e, args in zip(self.hparams["encoder"], self.hparams["encoder_args"])
-        ]
-
-        fusion_module = getattr(nns, self.hparams['fusion_module'])(
+        encoders = self.config.init_objects("encoder", latent_dim)
+        fusion_module = self.config.init_object(
+            "fusion_module",
             input_size=latent_dim*2,
             output_size=latent_dim*2,
             hidden_units=[latent_dim*2],
