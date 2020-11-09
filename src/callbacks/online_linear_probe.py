@@ -1,9 +1,9 @@
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-from torch import optim
 from pytorch_lightning.metrics.functional import accuracy
 from src.models.base import MLP
+from torch import optim
 from torch.nn import functional as F
 
 
@@ -71,7 +71,9 @@ class OnlineLinearProbe(pl.Callback):
                 for data in [[x1, None], [None, x2], [x1, x2]]
             ]
 
-    def on_train_batch_end(self, trainer, pl_module, batch, batch_idx, dataloader_idx):
+    def on_train_batch_end(
+        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx
+    ):
         device = pl_module.device
 
         # Get data
@@ -119,8 +121,10 @@ class OnlineLinearProbe(pl.Callback):
         with torch.no_grad():
             representations = self.get_representations(pl_module, x1, x2)
 
-        # Forward pass through all respective linear probes
-        preds = [probe(z) for z, probe in zip(representations, pl_module.linear_probes)]
+            # Forward pass through all respective linear probes
+            preds = [
+                probe(z) for z, probe in zip(representations, pl_module.linear_probes)
+            ]
 
         # Log metrics
         accs = [accuracy(p, labels) for p in preds]
@@ -145,8 +149,10 @@ class OnlineLinearProbe(pl.Callback):
         with torch.no_grad():
             representations = self.get_representations(pl_module, x1, x2)
 
-        # Forward pass through all respective linear probes
-        preds = [probe(z) for z, probe in zip(representations, pl_module.linear_probes)]
+            # Forward pass through all respective linear probes
+            preds = [
+                probe(z) for z, probe in zip(representations, pl_module.linear_probes)
+            ]
 
         # Log metrics
         accs = [accuracy(p, labels) for p in preds]

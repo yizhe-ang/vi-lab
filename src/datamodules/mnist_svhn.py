@@ -114,7 +114,7 @@ class MNIST_SVHN_DataModule(LightningDataModule):
     def test_dataloader(self):
         return DataLoader(
             self.test_set,
-            batch_size=16,
+            batch_size=8,
             shuffle=False,
             num_workers=self.num_workers,
             drop_last=False,

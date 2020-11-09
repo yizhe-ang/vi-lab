@@ -1,7 +1,11 @@
 import numpy as np
 import torch
 from pytorch_lightning.callbacks import LearningRateMonitor
-from src.callbacks import MultimodalVAE_ImageSampler, OnlineLinearProbe
+from src.callbacks import (
+    CoherenceEvaluator,
+    MultimodalVAE_ImageSampler,
+    OnlineLinearProbe,
+)
 from src.models import PartitionedMultimodalEncoder, PartitionedMultimodalVAE
 from src.objectives import pmvae_elbo
 
@@ -63,7 +67,8 @@ class PMVAE_Experiment(VAE_Experiment):
             self.model, batch["data"], num_samples=num_samples, keepdim=True
         )
         log_prob = (
-            torch.logsumexp(elbo, dim=1) - torch.log(torch.Tensor([num_samples]))
+            torch.logsumexp(elbo, dim=1)
+            - torch.log(torch.Tensor([num_samples]).to(self.device))
         ).mean()
 
         self.log_dict(
@@ -79,5 +84,6 @@ class PMVAE_Experiment(VAE_Experiment):
             MultimodalVAE_ImageSampler(include_modality=[True, True]),
             # MultimodalVAEReconstructor(self.datamodule.val_set),
             LearningRateMonitor(logging_interval="step"),
-            OnlineLinearProbe(),
+            OnlineLinearProbe(partitioned=True),
+            CoherenceEvaluator(),
         ]

@@ -2,7 +2,6 @@ import argparse
 from pathlib import Path
 
 import pytorch_lightning as pl
-import yaml
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 
@@ -26,10 +25,14 @@ def main(hparams, args):
     expt = getattr(experiments, hparams["experiment"])(hparams)
 
     # ModelCheckpoint and EarlyStopping callbacks
-    checkpoint_dir = Path("checkpoints") / hparams['name']
+    checkpoint_dir = Path("checkpoints") / hparams["name"]
     # FIXME Change this accordingly
     checkpoint_path = (
-        checkpoint_dir / args.project_name / hparams["name"] / "checkpoints" / "last.ckpt"
+        checkpoint_dir
+        / args.project_name
+        / hparams["name"]
+        / "checkpoints"
+        / "last.ckpt"
     )
 
     model_checkpoint = ModelCheckpoint(
@@ -55,7 +58,7 @@ def main(hparams, args):
         # FIXME Disabling early stopping
         # callbacks=expt.callbacks + [early_stop],
         callbacks=expt.callbacks + [model_checkpoint],
-        gpus=1,
+        gpus=[1],
         logger=wandb_logger,
         weights_summary="top",
         max_epochs=hparams["max_epochs"],
@@ -68,8 +71,8 @@ def main(hparams, args):
     trainer.fit(expt, expt.datamodule)
     trainer.test(datamodule=expt.datamodule)
 
-    mvae_tester = MVAE_Tester(expt)
-    mvae_tester.evaluate()
+    # mvae_tester = MVAE_Tester(expt)
+    # mvae_tester.evaluate()
 
 
 if __name__ == "__main__":
@@ -86,7 +89,9 @@ if __name__ == "__main__":
         help="whether to attempt to resume from the checkpoint directory",
     )
     parser.add_argument(
-        "--fast_dev_run", action="store_true", help="whether to run fast_dev_run",
+        "--fast_dev_run",
+        action="store_true",
+        help="whether to run fast_dev_run",
     )
 
     args = parser.parse_args()
