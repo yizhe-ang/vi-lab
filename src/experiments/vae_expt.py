@@ -34,19 +34,16 @@ class VAE_Experiment(LightningModule):
             len(self.datamodule.train_dataloader()) * self.hparams["max_epochs"]
         )
 
-        # Print number of parameters in model
+        # Have to rework forward calls for this to work
+        # self.example_input_array = torch.randn(32, 1, 28, 28)
+
+    def on_pretrain_routine_start(self):
+        # Get number of parameters in model
         n_parameters = sum(
             p.numel() for p in self.model.parameters() if p.requires_grad
         )
-        print("#####################################")
-        print(f"Total Number of Model Parameters: {n_parameters}")
-        # FIXME How to log from here?
-        self.log(
-            "n_parameters", n_parameters, on_step=True, on_epoch=False, prog_bar=False
-        )
-
-        # Have to rework forward calls for this to work
-        # self.example_input_array = torch.randn(32, 1, 28, 28)
+        logger = self.logger.experiment
+        logger.log({"n_parameters": n_parameters}, commit=False)
 
     def _init_datamodule(self):
         self.datamodule = self.config.init_object("datamodule")

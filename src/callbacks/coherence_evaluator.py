@@ -64,8 +64,8 @@ class CoherenceEvaluator(pl.Callback):
         self.mnist_net = MNIST_Classifier().to(pl_module.device)
         self.svhn_net = SVHN_Classifier().to(pl_module.device)
 
-        self.mnist_net.load_state_dict(torch.load(mnist_weights_path))
-        self.svhn_net.load_state_dict(torch.load(svhn_weights_path))
+        self.mnist_net.load_state_dict(torch.load(mnist_weights_path, map_location=torch.device('cpu')))
+        self.svhn_net.load_state_dict(torch.load(svhn_weights_path, map_location=torch.device('cpu')))
 
         self.mnist_net.eval()
         self.svhn_net.eval()
@@ -93,10 +93,17 @@ class CoherenceEvaluator(pl.Callback):
         pl_module.log_dict(metrics, on_step=False, on_epoch=True)
 
     def on_validation_epoch_end(self, trainer, pl_module):
-        pass
+        acc = self._joint_coherence(pl_module)
+
+        metrics = {"val_joint_coherence": acc}
+
+        logger = pl_module.logger.experiment
+        logger.log(metrics, commit=False)
 
     def on_test_epoch_end(self, trainer, pl_module):
         acc = self._joint_coherence(pl_module)
 
         metrics = {"test_joint_coherence": acc}
-        pl_module.log_dict(metrics, on_step=False, on_epoch=True)
+
+        logger = pl_module.logger.experiment
+        logger.log(metrics, commit=False)

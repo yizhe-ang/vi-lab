@@ -58,7 +58,7 @@ def main(hparams, args):
         # FIXME Disabling early stopping
         # callbacks=expt.callbacks + [early_stop],
         callbacks=expt.callbacks + [model_checkpoint],
-        gpus=[1],
+        gpus=None,
         logger=wandb_logger,
         weights_summary="top",
         max_epochs=hparams["max_epochs"],
@@ -81,7 +81,7 @@ if __name__ == "__main__":
         "--config", "-c", help="path to the config file", default="configs/config.yaml"
     )
     parser.add_argument(
-        "--project_name", help="name of wandb project", default="vae-expt-v2"
+        "--project_name", help="name of wandb project", default="vae-expt-v3"
     )
     parser.add_argument(
         "--resume",
