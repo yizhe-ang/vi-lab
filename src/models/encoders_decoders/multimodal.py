@@ -151,7 +151,9 @@ class MultimodalEncoder(nn.Module):
 class PartitionedMultimodalEncoder(nn.Module):
     def __init__(self, encoders: List[nn.Module], fusion_module: nn.Module):
         """Composes multiple unimodal (partitioned) encoders into a multimodal
-        encoder using a fusion module
+        encoder using a fusion module.
+
+        Outputs both modality-specific and -shared latent vectors.
 
         Assumes all unimodal encoders encode each modality into a shared feature
         vector of the same dim
