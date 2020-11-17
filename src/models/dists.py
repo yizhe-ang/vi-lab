@@ -17,14 +17,16 @@ from nflows.transforms import Transform
 from nflows.utils import torchutils
 from torch.distributions import Categorical
 
-from src.models.base import ConvDecoder, ConvEncoder
+from src.models.base import ConvDecoder, ConvEncoder, MLP
 
 __all__ = [
     "standard_normal",
     "standard_flow",
+    "standard_cond_flow",
+    "cond_normal",
     "diagonal_normal",
     "cond_flow",
-    "ConditionalIndependentBernoulli"
+    "ConditionalIndependentBernoulli",
 ]
 
 
@@ -178,6 +180,54 @@ def standard_flow(
     transform = transforms.CompositeTransform([transform, create_lu_linear(n_dim)])
 
     return Flow(transform, base_dist)
+
+
+def standard_cond_flow(
+    n_dim: int,
+    context_features: int,
+    flow_type: str,
+    cond_base=False,
+    n_flow_steps=10,
+    n_flow_hidden=128,
+    dropout_prob=0.0,
+) -> Distribution:
+    """Standard flow with layers conditioned on additional context vector"""
+    create_flow = create_flow_dict[flow_type]
+
+    if cond_base:
+        context_encoder = nn.Linear(context_features, n_dim * 2)
+        base_dist = ConditionalDiagonalNormal(
+            shape=[n_dim], context_encoder=context_encoder
+        )
+    else:
+        base_dist = StandardNormal((n_dim,))
+
+    transform = transforms.CompositeTransform(
+        [
+            transforms.CompositeTransform(
+                [
+                    create_lu_linear(n_dim),
+                    create_flow(
+                        n_dim,
+                        i,
+                        context_features=context_features,
+                        n_hidden=n_flow_hidden,
+                    ),
+                ]
+            )
+            for i in range(n_flow_steps)
+        ]
+    )
+    transform = transforms.CompositeTransform([transform, create_lu_linear(n_dim)])
+
+    return Flow(transform, base_dist)
+
+
+def cond_normal(n_dim: int, context_features: int):
+    context_encoder = MLP(
+        context_features, n_dim * 2, hidden_units=[context_features, context_features]
+    )
+    return ConditionalDiagonalNormal(shape=[n_dim], context_encoder=context_encoder)
 
 
 # APPROX POSTERIORS ############################################################

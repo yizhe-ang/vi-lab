@@ -1,6 +1,10 @@
 import numpy as np
 from pytorch_lightning.callbacks import LearningRateMonitor
-from src.callbacks import MultimodalVAE_ImageSampler, OnlineLinearProbe
+from src.callbacks import (
+    MultimodalVAE_ImageSampler,
+    OnlineLinearProbe,
+    CoherenceEvaluator,
+)
 from src.models import MultimodalEncoder, ProductOfExpertsEncoder
 from src.models.vaes import MultimodalVAE
 from src.objectives import log_prob_lower_bound
@@ -46,7 +50,7 @@ class MVAE_Experiment(VAE_Experiment):
         return elbo.mean()
 
     def test_step(self, batch, batch_idx):
-        elbo = self._run_step(batch)
+        # elbo = self._run_step(batch)
         # Get joint log prob (using importance sampling)
         log_prob = log_prob_lower_bound(
             self.model, batch["data"], num_samples=1000
@@ -55,7 +59,7 @@ class MVAE_Experiment(VAE_Experiment):
 
         self.log_dict(
             {
-                "test_elbo": elbo,
+                # "test_elbo": elbo,
                 "test_log_prob": log_prob,
                 # "test_acc": acc
             }
@@ -74,6 +78,7 @@ class MVAE_Experiment(VAE_Experiment):
             # MultimodalVAEReconstructor(self.datamodule.val_set),
             LearningRateMonitor(logging_interval="step"),
             OnlineLinearProbe(),
+            CoherenceEvaluator()
         ]
 
 
@@ -93,9 +98,9 @@ class Fusion_MVAE_Experiment(MVAE_Experiment):
         encoders = self.config.init_objects("encoder", latent_dim)
         fusion_module = self.config.init_object(
             "fusion_module",
-            input_size=latent_dim*2,
-            output_size=latent_dim*2,
-            hidden_units=[latent_dim*2],
+            input_size=latent_dim * 2,
+            output_size=latent_dim * 2,
+            hidden_units=[latent_dim * 2],
         )
 
         return MultimodalEncoder(encoders, fusion_module)

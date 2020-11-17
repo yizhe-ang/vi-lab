@@ -1,14 +1,14 @@
-name: pmvae_2
+name: hier_pmvae_v1_3
 seed: 0
 
-experiment: PMVAE_Experiment
+experiment: HierPMVAE_v1_Experiment
 
 max_epochs: 50
 
 m_latent_dim: 4
 s_latent_dim: 16
 
-objective: pmvaevae_elbo
+objective: hier_pmvaevae_elbo
 
 datamodule: datamodules.MNIST_SVHN_DataModule
 datamodule_args:
@@ -22,12 +22,16 @@ s_prior_args:
   n_flow_steps: 5
   n_flow_hidden: 20
 
-m_priors: [models.standard_flow, models.standard_flow]
+m_priors:
+  - models.standard_cond_flow
+  - models.standard_cond_flow
 m_priors_args:
   - flow_type: affine_coupling
+    cond_base: True
     n_flow_steps: 5
     n_flow_hidden: 20
   - flow_type: affine_coupling
+    cond_base: True
     n_flow_steps: 5
     n_flow_hidden: 20
 

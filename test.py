@@ -31,6 +31,9 @@ def main(hparams, args):
     elif args.resume:
         checkpoint_path = str(
             checkpoint_dir
+            / args.project_name
+            / hparams["name"]
+            / "checkpoints"
             / "last.ckpt"
         )
     else:
@@ -59,48 +62,38 @@ def main(hparams, args):
         # FIXME Disabling early stopping
         # callbacks=expt.callbacks + [early_stop],
         callbacks=expt.callbacks + [model_checkpoint],
-        gpus=[0],
+        gpus=[1],
         logger=wandb_logger,
         weights_summary="top",
         max_epochs=hparams["max_epochs"],
         terminate_on_nan=True,
         # val_check_interval=0.25,
         # auto_lr_find=True,
-        # HACK Skip train and val if evaluating
-        limit_val_batches=0. if args.evaluate else 1.0,
-        limit_train_batches=0. if args.evaluate else 1.0,
+        # limit_val_batches=0.,
     )
 
-    trainer.fit(expt, expt.datamodule)
     if args.evaluate:
         trainer.test(datamodule=expt.datamodule)
+    else:
+        trainer.fit(expt, expt.datamodule)
+
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="VAE Experiment")
     parser.add_argument(
-        "--config", "-c", help="path to the config file", default="configs/config.yaml"
+        "--project_name", help="name of wandb project", default="vae-expt-v3"
     )
     parser.add_argument(
-        "--project_name", help="name of wandb project", default="vae-expt-v3"
+        "--experiment", help="name of experiment module"
     )
     parser.add_argument(
         "--checkpoint", help="path to checkpoint to load"
     )
     parser.add_argument(
-        "--resume",
-        action="store_true",
-        help="whether to attempt to resume from last checkpoint",
-    )
-    parser.add_argument(
         "--fast_dev_run",
         action="store_true",
         help="whether to run fast_dev_run",
-    )
-    parser.add_argument(
-        "--evaluate",
-        action="store_true",
-        help="whether to run evaluation only",
     )
 
     args = parser.parse_args()

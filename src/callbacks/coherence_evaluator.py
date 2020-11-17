@@ -64,8 +64,8 @@ class CoherenceEvaluator(pl.Callback):
         self.mnist_net = MNIST_Classifier().to(pl_module.device)
         self.svhn_net = SVHN_Classifier().to(pl_module.device)
 
-        self.mnist_net.load_state_dict(torch.load(mnist_weights_path, map_location=torch.device('cpu')))
-        self.svhn_net.load_state_dict(torch.load(svhn_weights_path, map_location=torch.device('cpu')))
+        self.mnist_net.load_state_dict(torch.load(mnist_weights_path))
+        self.svhn_net.load_state_dict(torch.load(svhn_weights_path))
 
         self.mnist_net.eval()
         self.svhn_net.eval()

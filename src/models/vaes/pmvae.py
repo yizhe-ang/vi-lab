@@ -84,6 +84,7 @@ class PartitionedMultimodalVAE(nn.Module):
             {"m": List[Optional[B, Z]],    "s": [B, Z]}
             {"m": List[Optional[B, K, Z]], "s": [B, K, Z]}
         """
+        # Encode into posterior dist parameters
         posterior_context = self.inputs_encoder(inputs)
         m_contexts = posterior_context["m"]
         s_context = posterior_context["s"]
@@ -178,3 +179,85 @@ class PartitionedMultimodalVAE(nn.Module):
         x_recons = self.decode(y_latents, mean)[0]
 
         return [x_recons, y_recons]
+
+
+class HierPMVAE_v1(PartitionedMultimodalVAE):
+    def decode(self, latents: Dict[Any, Any], mean: bool) -> List[torch.Tensor]:
+        samples_list = []
+        m_latents = latents["m"]
+        s_latent = latents["s"]
+        batch_size = s_latent.shape[0]
+
+        # Get samples from each decoder
+        for likelihood, prior, m_latent in zip(
+            self.likelihoods, self.m_priors, m_latents
+        ):
+            # If missing m_latent, sample from prior instead
+            if m_latent is None:
+                # Modality-specific prior is conditioned on s_latent
+                m_latent = prior.sample(1, context=s_latent)
+                m_latent = torchutils.merge_leading_dims(m_latent, num_dims=2)
+
+            # Concat modality-specific and -invariant latents
+            concat_latent = torch.cat([m_latent, s_latent], dim=-1)
+
+            if mean:
+                samples = likelihood.mean(context=concat_latent)
+            else:
+                samples = likelihood.sample(num_samples=1, context=concat_latent)
+                samples = torchutils.merge_leading_dims(samples, num_dims=2)
+
+            samples_list.append(samples)
+
+        return samples_list
+
+    def sample(self, num_samples: int, mean=False) -> List[torch.Tensor]:
+        s_latent = self.s_prior.sample(num_samples)
+        # Modality-specific priors are conditioned on s_latent
+        # Take note of tensor shapes
+        m_latents = [
+            torchutils.merge_leading_dims(prior.sample(1, context=s_latent), num_dims=2)
+            for prior in self.m_priors
+        ]
+
+        return self.decode({"m": m_latents, "s": s_latent}, mean)
+
+
+class HierPMVAE_v2(PartitionedMultimodalVAE):
+    def decode(self, latents: Dict[Any, Any], mean: bool) -> List[torch.Tensor]:
+        samples_list = []
+        m_latents = latents["m"]
+        s_latent = latents["s"]
+        batch_size = s_latent.shape[0]
+
+        # Get samples from each decoder
+        for likelihood, prior, m_latent in zip(
+            self.likelihoods, self.m_priors, m_latents
+        ):
+            # If missing m_latent, sample from prior instead
+            if m_latent is None:
+                # Modality-specific prior is conditioned on s_latent
+                m_latent = prior.sample(1, context=s_latent)
+                m_latent = torchutils.merge_leading_dims(m_latent, num_dims=2)
+
+            # Don't concat latents; only condition on modality-specific latent
+            if mean:
+                samples = likelihood.mean(context=m_latent)
+            else:
+                samples = likelihood.sample(num_samples=1, context=m_latent)
+                samples = torchutils.merge_leading_dims(samples, num_dims=2)
+
+            samples_list.append(samples)
+
+        return samples_list
+
+    def sample(self, num_samples: int, mean=False) -> List[torch.Tensor]:
+        s_latent = self.s_prior.sample(num_samples)
+        # Modality-specific priors are conditioned on s_latent
+        # Take note of tensor shapes
+        m_latents = [
+            torchutils.merge_leading_dims(prior.sample(1, context=s_latent), num_dims=2)
+            for prior in self.m_priors
+        ]
+
+        return self.decode({"m": m_latents, "s": s_latent}, mean)

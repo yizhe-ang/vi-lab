@@ -31,6 +31,7 @@ class OnlineLinearProbe(pl.Callback):
         return torch.cat([l for l in m_latents if l is not None] + [s_latent], dim=-1)
 
     def on_pretrain_routine_start(self, trainer, pl_module):
+        # FIXME Attach to different (earlier) callback hook?
         self.n_classes = pl_module.datamodule.n_classes
         n_modalities = len(pl_module.datamodule.dims)
 
@@ -53,6 +54,7 @@ class OnlineLinearProbe(pl.Callback):
                 MLP(self.m_latent_dim * 2 + self.s_latent_dim, self.n_classes),
             ]
 
+        # FIXME Shouldn't attach to `pl_module`?
         pl_module.linear_probes = nn.ModuleList(linear_probes).to(pl_module.device)
 
         # Init optimizer
@@ -107,6 +109,7 @@ class OnlineLinearProbe(pl.Callback):
         # logger = pl_module.logger.experiment
         # logger.log(metrics, commit=False)
 
+        # FIXME This doesn't work
         pl_module.log_dict(metrics, on_step=True, on_epoch=False, prog_bar=False)
 
     def on_validation_batch_end(

@@ -245,6 +245,9 @@ def unimodal_elbos(
     return elbo_sum, contexts
 
 
+# PARTITIONED ##################################################################
+
+
 def partitioned_unimodal_elbos(
     model: nn.Module,
     inputs: List[torch.Tensor],
@@ -413,9 +416,7 @@ def pmvae_elbo(
     # Compute log prob of inputs under the decoder
     log_p_x = torch.zeros_like(log_p_z_s)
 
-    for x, m_latent, likelihood in zip(
-        inputs, m_latents, model.likelihoods
-    ):
+    for x, m_latent, likelihood in zip(inputs, m_latents, model.likelihoods):
         x = torchutils.repeat_rows(x, num_reps=num_samples)
         concat_latent = torch.cat([m_latent, s_latent], dim=-1)
         log_p_x += likelihood.log_prob(x, context=concat_latent)
@@ -430,6 +431,389 @@ def pmvae_elbo(
         return elbo
     else:
         return torch.sum(elbo, dim=1) / num_samples  # Average ELBO across samples
+
+
+# HIERARCHICAL PARTITIONED ######################################################
+
+
+def hier_partitioned_unimodal_elbos(
+    model: nn.Module,
+    inputs: List[torch.Tensor],
+    likelihood_weights=List[float],
+    num_samples=1,
+    kl_multiplier=1.0,
+) -> torch.Tensor:
+    num_samples = int(num_samples)
+
+    batch_size = inputs[0].shape[0]
+
+    # Compute the ELBO for each modality
+    elbo_sum = torch.zeros(batch_size, device=inputs[0].device)
+    # Cache the posterior context of each modality
+    s_contexts = []
+    # Cache the sampled modality-specific latents
+    m_latents = []
+
+    for i, (x, likelihood, weight, m_prior, m_posterior) in enumerate(
+        zip(
+            inputs,
+            model.likelihoods,
+            likelihood_weights,
+            model.m_priors,
+            model.m_posteriors,
+        )
+    ):
+        unimodal_inputs = [None] * len(inputs)
+        unimodal_inputs[i] = x
+
+        posterior_context = model.inputs_encoder(unimodal_inputs)
+        m_context = posterior_context["m"][i]
+        s_context = posterior_context["s"]
+
+        # Compute log prob of latents under the posterior
+        m_latent, log_q_z_m = m_posterior.sample_and_log_prob(
+            num_samples, context=m_context
+        )
+        m_latent = torchutils.merge_leading_dims(m_latent, num_dims=2)
+        log_q_z_m = torchutils.merge_leading_dims(log_q_z_m, num_dims=2)
+
+        s_latent, log_q_z_s = model.s_posterior.sample_and_log_prob(
+            num_samples, context=s_context
+        )
+        s_latent = torchutils.merge_leading_dims(s_latent, num_dims=2)
+        log_q_z_s = torchutils.merge_leading_dims(log_q_z_s, num_dims=2)
+
+        # Compute log prob of latents under the prior
+        # Condition on s_latent
+        log_p_z_m = m_prior.log_prob(m_latent, context=s_latent)
+        log_p_z_s = model.s_prior.log_prob(s_latent)
+
+        # Compute log prob of inputs under the decoder
+        concat_latent = torch.cat([m_latent, s_latent], dim=-1)
+        log_p_x = likelihood.log_prob(x, context=concat_latent)
+
+        # Compute ELBO
+        elbo = (weight * log_p_x) + (
+            kl_multiplier * (log_p_z_m + log_p_z_s - log_q_z_m - log_q_z_s)
+        )
+
+        elbo_sum += elbo
+        s_contexts.append(s_context)
+        m_latents.append(m_latent)
+
+    return elbo_sum, s_contexts, m_latents
+
+
+def hier_pmvaevae_elbo(
+    model: nn.Module,
+    inputs: List[torch.Tensor],
+    likelihood_weights=List[float],
+    num_samples=1,
+    kl_multiplier=1.0,
+) -> torch.Tensor:
+    """PMVAE modified objective"""
+    num_samples = int(num_samples)
+
+    x, y = inputs
+    x_likelihood, y_likelihood = model.likelihoods
+
+    # Compute unimodal components
+    elbo_sum, s_contexts, m_latents = hier_partitioned_unimodal_elbos(
+        model,
+        inputs,
+        likelihood_weights,
+        num_samples=num_samples,
+        kl_multiplier=kl_multiplier,
+    )
+
+    # Parameters for q(z_s|x) and q(z_s|y)
+    x_s_context, y_s_context = s_contexts
+    x_weight, y_weight = likelihood_weights
+
+    # Compute bimodal components
+    xy_s_context = model.inputs_encoder(inputs)["s"]
+
+    s_latent, log_q_z_xy = model.s_posterior.sample_and_log_prob(
+        num_samples, context=xy_s_context
+    )
+    s_latent = torchutils.merge_leading_dims(s_latent, num_dims=2)
+    log_q_z_xy = torchutils.merge_leading_dims(log_q_z_xy, num_dims=2)
+
+    # HACK hardcode
+    log_q_z_x = model.s_posterior.log_prob(s_latent, context=x_s_context)
+    log_q_z_y = model.s_posterior.log_prob(s_latent, context=y_s_context)
+
+    kl_1 = log_q_z_xy - log_q_z_x
+    kl_2 = log_q_z_xy - log_q_z_y
+
+    log_p_x_z = x_likelihood.log_prob(
+        x, context=torch.cat([m_latents[0], s_latent], dim=-1)
+    )
+    log_p_x_y = y_likelihood.log_prob(
+        y, context=torch.cat([m_latents[1], s_latent], dim=-1)
+    )
+
+    elbo = (
+        (x_weight * log_p_x_z)
+        + (y_weight * log_p_x_y)
+        - (kl_multiplier * kl_1)
+        - (kl_multiplier * kl_2)
+    )
+
+    elbo_sum += elbo
+
+    return elbo_sum
+
+
+def hier_pmvae_elbo(
+    model: nn.Module,
+    inputs: List[torch.Tensor],
+    num_samples=1,
+    kl_multiplier=1.0,
+    keepdim=False,
+):
+    posterior_context = model.inputs_encoder(inputs)
+    m_contexts = posterior_context["m"]
+    s_context = posterior_context["s"]
+
+    # Compute log prob of latents under the posterior
+    m_latents = []
+    log_q_z_ms = []
+
+    for posterior, context in zip(model.m_posteriors, m_contexts):
+        m_latent, log_q_z_m = posterior.sample_and_log_prob(
+            num_samples, context=context
+        )
+        m_latent = torchutils.merge_leading_dims(m_latent, num_dims=2)
+        log_q_z_m = torchutils.merge_leading_dims(log_q_z_m, num_dims=2)
+
+        m_latents.append(m_latent)
+        log_q_z_ms.append(log_q_z_m)
+
+    s_latent, log_q_z_s = model.s_posterior.sample_and_log_prob(
+        num_samples, context=s_context
+    )
+    s_latent = torchutils.merge_leading_dims(s_latent, num_dims=2)
+    log_q_z_s = torchutils.merge_leading_dims(log_q_z_s, num_dims=2)
+
+    # Compute log prob of latents under the prior
+    # Condition on s_latent
+    log_p_z_ms = [
+        prior.log_prob(latent, context=s_latent)
+        for prior, latent in zip(model.m_priors, m_latents)
+    ]
+    log_p_z_s = model.s_prior.log_prob(s_latent)
+
+    # Compute log prob of inputs under the decoder
+    log_p_x = torch.zeros_like(log_p_z_s)
+
+    for x, m_latent, likelihood in zip(inputs, m_latents, model.likelihoods):
+        x = torchutils.repeat_rows(x, num_reps=num_samples)
+        concat_latent = torch.cat([m_latent, s_latent], dim=-1)
+        log_p_x += likelihood.log_prob(x, context=concat_latent)
+
+    # Compute ELBO
+    log_p_z = torch.stack(log_p_z_ms).sum(0) + log_p_z_s
+    log_q_z = torch.stack(log_q_z_ms).sum(0) + log_q_z_s
+    elbo = log_p_x + (kl_multiplier * (log_p_z - log_q_z))
+    elbo = torchutils.split_leading_dim(elbo, [-1, num_samples])
+
+    if keepdim:
+        return elbo
+    else:
+        return torch.sum(elbo, dim=1) / num_samples  # Average ELBO across samples
+
+
+# HIERARCHICAL PARTITIONED v2 ######################################################
+
+
+def hier_partitioned_v2_unimodal_elbos(
+    model: nn.Module,
+    inputs: List[torch.Tensor],
+    likelihood_weights=List[float],
+    num_samples=1,
+    kl_multiplier=1.0,
+) -> torch.Tensor:
+    num_samples = int(num_samples)
+
+    batch_size = inputs[0].shape[0]
+
+    # Compute the ELBO for each modality
+    elbo_sum = torch.zeros(batch_size, device=inputs[0].device)
+    # Cache the posterior context of each modality
+    s_contexts = []
+    # Cache the sampled modality-specific latents
+    m_latents = []
+
+    for i, (x, likelihood, weight, m_prior, m_posterior) in enumerate(
+        zip(
+            inputs,
+            model.likelihoods,
+            likelihood_weights,
+            model.m_priors,
+            model.m_posteriors,
+        )
+    ):
+        unimodal_inputs = [None] * len(inputs)
+        unimodal_inputs[i] = x
+
+        posterior_context = model.inputs_encoder(unimodal_inputs)
+        m_context = posterior_context["m"][i]
+        s_context = posterior_context["s"]
+
+        # Compute log prob of latents under the posterior
+        m_latent, log_q_z_m = m_posterior.sample_and_log_prob(
+            num_samples, context=m_context
+        )
+        m_latent = torchutils.merge_leading_dims(m_latent, num_dims=2)
+        log_q_z_m = torchutils.merge_leading_dims(log_q_z_m, num_dims=2)
+
+        s_latent, log_q_z_s = model.s_posterior.sample_and_log_prob(
+            num_samples, context=s_context
+        )
+        s_latent = torchutils.merge_leading_dims(s_latent, num_dims=2)
+        log_q_z_s = torchutils.merge_leading_dims(log_q_z_s, num_dims=2)
+
+        # Compute log prob of latents under the prior
+        # Condition on s_latent
+        log_p_z_m = m_prior.log_prob(m_latent, context=s_latent)
+        log_p_z_s = model.s_prior.log_prob(s_latent)
+
+        # Compute log prob of inputs under the decoder
+        # No need to concat
+        log_p_x = likelihood.log_prob(x, context=m_latent)
+
+        # Compute ELBO
+        elbo = (weight * log_p_x) + (
+            kl_multiplier * (log_p_z_m + log_p_z_s - log_q_z_m - log_q_z_s)
+        )
+
+        elbo_sum += elbo
+        s_contexts.append(s_context)
+        m_latents.append(m_latent)
+
+    return elbo_sum, s_contexts, m_latents
+
+
+def hier_pmvaevae_v2_elbo(
+    model: nn.Module,
+    inputs: List[torch.Tensor],
+    likelihood_weights=List[float],
+    num_samples=1,
+    kl_multiplier=1.0,
+) -> torch.Tensor:
+    """PMVAE modified objective"""
+    num_samples = int(num_samples)
+
+    x, y = inputs
+    x_likelihood, y_likelihood = model.likelihoods
+
+    # Compute unimodal components
+    elbo_sum, s_contexts, m_latents = hier_partitioned_v2_unimodal_elbos(
+        model,
+        inputs,
+        likelihood_weights,
+        num_samples=num_samples,
+        kl_multiplier=kl_multiplier,
+    )
+
+    # Parameters for q(z_s|x) and q(z_s|y)
+    x_s_context, y_s_context = s_contexts
+    x_weight, y_weight = likelihood_weights
+
+    # Compute bimodal components
+    xy_s_context = model.inputs_encoder(inputs)["s"]
+
+    s_latent, log_q_z_xy = model.s_posterior.sample_and_log_prob(
+        num_samples, context=xy_s_context
+    )
+    s_latent = torchutils.merge_leading_dims(s_latent, num_dims=2)
+    log_q_z_xy = torchutils.merge_leading_dims(log_q_z_xy, num_dims=2)
+
+    # HACK hardcode
+    log_q_z_x = model.s_posterior.log_prob(s_latent, context=x_s_context)
+    log_q_z_y = model.s_posterior.log_prob(s_latent, context=y_s_context)
+
+    kl_1 = log_q_z_xy - log_q_z_x
+    kl_2 = log_q_z_xy - log_q_z_y
+
+    # FIXME Extra log p(x) terms?
+    # Same m_latent used to generate unimodal terms
+    log_p_x_z = x_likelihood.log_prob(x, context=m_latents[0])
+    log_p_x_y = y_likelihood.log_prob(y, context=m_latents[1])
+
+    elbo = (
+        (x_weight * log_p_x_z)
+        + (y_weight * log_p_x_y)
+        - (kl_multiplier * kl_1)
+        - (kl_multiplier * kl_2)
+    )
+
+    elbo_sum += elbo
+
+    return elbo_sum
+
+
+def hier_pmvae_v2_elbo(
+    model: nn.Module,
+    inputs: List[torch.Tensor],
+    num_samples=1,
+    kl_multiplier=1.0,
+    keepdim=False,
+):
+    posterior_context = model.inputs_encoder(inputs)
+    m_contexts = posterior_context["m"]
+    s_context = posterior_context["s"]
+
+    # Compute log prob of latents under the posterior
+    m_latents = []
+    log_q_z_ms = []
+
+    for posterior, context in zip(model.m_posteriors, m_contexts):
+        m_latent, log_q_z_m = posterior.sample_and_log_prob(
+            num_samples, context=context
+        )
+        m_latent = torchutils.merge_leading_dims(m_latent, num_dims=2)
+        log_q_z_m = torchutils.merge_leading_dims(log_q_z_m, num_dims=2)
+
+        m_latents.append(m_latent)
+        log_q_z_ms.append(log_q_z_m)
+
+    s_latent, log_q_z_s = model.s_posterior.sample_and_log_prob(
+        num_samples, context=s_context
+    )
+    s_latent = torchutils.merge_leading_dims(s_latent, num_dims=2)
+    log_q_z_s = torchutils.merge_leading_dims(log_q_z_s, num_dims=2)
+
+    # Compute log prob of latents under the prior
+    # Condition on s_latent
+    log_p_z_ms = [
+        prior.log_prob(latent, context=s_latent)
+        for prior, latent in zip(model.m_priors, m_latents)
+    ]
+    log_p_z_s = model.s_prior.log_prob(s_latent)
+
+    # Compute log prob of inputs under the decoder
+    log_p_x = torch.zeros_like(log_p_z_s)
+
+    for x, m_latent, likelihood in zip(inputs, m_latents, model.likelihoods):
+        x = torchutils.repeat_rows(x, num_reps=num_samples)
+        # Don't concat
+        log_p_x += likelihood.log_prob(x, context=m_latent)
+
+    # Compute ELBO
+    log_p_z = torch.stack(log_p_z_ms).sum(0) + log_p_z_s
+    log_q_z = torch.stack(log_q_z_ms).sum(0) + log_q_z_s
+    elbo = log_p_x + (kl_multiplier * (log_p_z - log_q_z))
+    elbo = torchutils.split_leading_dim(elbo, [-1, num_samples])
+
+    if keepdim:
+        return elbo
+    else:
+        return torch.sum(elbo, dim=1) / num_samples  # Average ELBO across samples
+
+
+# MISC #########################################################################
 
 
 @set_default_tensor_type(torch.cuda.FloatTensor)
