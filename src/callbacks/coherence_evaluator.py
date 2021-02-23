@@ -23,6 +23,9 @@ class CoherenceEvaluator(pl.Callback):
             # Get cross reconstructions
             m_recons, s_recons = model.cross_reconstruct([mnist, svhn], mean=True)
 
+            # FIXME Resize back mnist
+            # m_recons = F.interpolate(m_recons, size=28, mode="bilinear")
+
             # Get predictions
             m_preds = self.mnist_net(m_recons)
             s_preds = self.svhn_net(s_recons)

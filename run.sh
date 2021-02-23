@@ -1,4 +1,3 @@
 #!/usr/bin/env bash
-python run.py -c configs/mnist_svhn/poe_mvae.yaml --resume
-python run.py -c configs/mnist_svhn/poe_vaevae.yaml
-python run.py -c configs/mnist_svhn/set.yaml
+python run.py -c configs/tmp/semi_vaevae_9.yaml --gpu 0
+python run.py -c configs/tmp/semi_vaevae_11.yaml --gpu 0

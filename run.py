@@ -24,15 +24,14 @@ def main(hparams, args):
     expt = getattr(experiments, hparams["experiment"])(hparams)
 
     # ModelCheckpoint and EarlyStopping callbacks
-    checkpoint_dir = Path("checkpoints") / hparams["name"]
+    checkpoint_dir = Path("checkpoints") / args.project_name / hparams["name"]
+
+    # If resuming from checkpoint
     # FIXME Change this accordingly
     if args.checkpoint:
         checkpoint_path = args.checkpoint
     elif args.resume:
-        checkpoint_path = str(
-            checkpoint_dir
-            / "last.ckpt"
-        )
+        checkpoint_path = str(checkpoint_dir / "last.ckpt")
     else:
         checkpoint_path = None
 
@@ -59,16 +58,19 @@ def main(hparams, args):
         # FIXME Disabling early stopping
         # callbacks=expt.callbacks + [early_stop],
         callbacks=expt.callbacks + [model_checkpoint],
-        gpus=[0],
+        gpus=[args.gpu],
         logger=wandb_logger,
         weights_summary="top",
         max_epochs=hparams["max_epochs"],
-        terminate_on_nan=True,
+        # terminate_on_nan=True,
+        # gradient_clip_val=hparams['gradient_clip_val'],
+        # track_grad_norm=2,
+        # automatic_optimization=False,
         # val_check_interval=0.25,
         # auto_lr_find=True,
         # HACK Skip train and val if evaluating
-        limit_val_batches=0. if args.evaluate else 1.0,
-        limit_train_batches=0. if args.evaluate else 1.0,
+        limit_val_batches=0.0 if args.evaluate else 1.0,
+        limit_train_batches=0.0 if args.evaluate else 1.0,
     )
 
     trainer.fit(expt, expt.datamodule)
@@ -82,11 +84,10 @@ if __name__ == "__main__":
         "--config", "-c", help="path to the config file", default="configs/config.yaml"
     )
     parser.add_argument(
-        "--project_name", help="name of wandb project", default="vae-expt-v3"
+        "--project_name", help="name of wandb project", default="vae-expt-v4"
     )
-    parser.add_argument(
-        "--checkpoint", help="path to checkpoint to load"
-    )
+    parser.add_argument("--gpu", help="which gpu to use", type=int)
+    parser.add_argument("--checkpoint", help="path to checkpoint to load")
     parser.add_argument(
         "--resume",
         action="store_true",

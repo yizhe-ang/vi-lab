@@ -35,6 +35,7 @@ class MLP(nn.Sequential):
         output_size: int,
         hidden_units: List[Optional[int]] = [],
         activation: str = "ReLU",
+        first_layer_nonlinear=False,
         in_lambda=None,
         out_lambda=None,
     ):
@@ -42,6 +43,10 @@ class MLP(nn.Sequential):
 
         if in_lambda:
             layers.append(LambdaLayer(in_lambda))
+
+        # Non-linear activation before the first layer
+        if first_layer_nonlinear:
+            layers.append(getattr(nn, activation)())
 
         if hidden_units:
             for in_size, out_size in zip(

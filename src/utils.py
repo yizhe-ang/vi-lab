@@ -2,8 +2,6 @@ import math
 from contextlib import contextmanager
 from importlib import import_module
 from typing import Dict, List
-from itertools import cycle
-from numpy.lib.arraysetops import isin
 
 import torch
 import yaml
@@ -46,7 +44,6 @@ class ConfigManager:
         args = list(zip(*args))
         # FIXME Figure out something for kwargs
 
-
         for object_path, object_arg, arg in zip(object_paths, object_args, args):
             module_name, object_name = object_path.rsplit(".", 1)
             module = import_module(f"{root}.{module_name}")
@@ -68,6 +65,50 @@ def load_yaml(path):
 
 def log_mean_exp(value, dim=0, keepdim=False):
     return torch.logsumexp(value, dim, keepdim=keepdim) - math.log(value.size(dim))
+
+
+CELEBA_CLASSES = [
+    "5_o_Clock_Shadow",
+    "Arched_Eyebrows",
+    "Attractive",
+    "Bags_Under_Eyes",
+    "Bald",
+    "Bangs",
+    "Big_Lips",
+    "Big_Nose",
+    "Black_Hair",
+    "Blond_Hair",
+    "Blurry",
+    "Brown_Hair",
+    "Bushy_Eyebrows",
+    "Chubby",
+    "Double_Chin",
+    "Eyeglasses",
+    "Goatee",
+    "Gray_Hair",
+    "Heavy_Makeup",
+    "High_Cheekbones",
+    "Male",
+    "Mouth_Slightly_Open",
+    "Mustache",
+    "Narrow_Eyes",
+    "No_Beard",
+    "Oval_Face",
+    "Pale_Skin",
+    "Pointy_Nose",
+    "Receding_Hairline",
+    "Rosy_Cheeks",
+    "Sideburns",
+    "Smiling",
+    "Straight_Hair",
+    "Wavy_Hair",
+    "Wearing_Earrings",
+    "Wearing_Hat",
+    "Wearing_Lipstick",
+    "Wearing_Necklace",
+    "Wearing_Necktie",
+    "Young",
+]
 
 
 # HACK

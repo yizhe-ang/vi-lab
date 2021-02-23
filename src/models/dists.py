@@ -1,4 +1,4 @@
-from typing import List, Callable
+from typing import List
 
 import numpy as np
 import torch
@@ -15,18 +15,19 @@ from nflows.flows import Flow
 from nflows.nn.nets import ResidualNet
 from nflows.transforms import Transform
 from nflows.utils import torchutils
-from torch.distributions import Categorical
-
-from src.models.base import ConvDecoder, ConvEncoder, MLP
+from src.models.base import MLP, ConvDecoder
+from torch.distributions import Categorical, OneHotCategorical
 
 __all__ = [
     "standard_normal",
     "standard_flow",
-    "standard_cond_flow",
+    "cond_standard_flow",
     "cond_normal",
     "diagonal_normal",
+    "cond_diagonal_normal",
     "cond_flow",
     "ConditionalIndependentBernoulli",
+    "ConditionalOneHotCategorical",
 ]
 
 
@@ -182,7 +183,7 @@ def standard_flow(
     return Flow(transform, base_dist)
 
 
-def standard_cond_flow(
+def cond_standard_flow(
     n_dim: int,
     context_features: int,
     flow_type: str,
@@ -195,6 +196,7 @@ def standard_cond_flow(
     create_flow = create_flow_dict[flow_type]
 
     if cond_base:
+        # FIXME Apply non-linearity first?
         context_encoder = nn.Linear(context_features, n_dim * 2)
         base_dist = ConditionalDiagonalNormal(
             shape=[n_dim], context_encoder=context_encoder
@@ -223,9 +225,19 @@ def standard_cond_flow(
     return Flow(transform, base_dist)
 
 
-def cond_normal(n_dim: int, context_features: int):
+def cond_normal(n_dim: int, context_features: int, n_hidden=3):
+    # Number of hidden layers for context encoder
+    if n_hidden:
+        hidden_units = [context_features] * (n_hidden - 1)
+    else:
+        hidden_units = []
+
     context_encoder = MLP(
-        context_features, n_dim * 2, hidden_units=[context_features, context_features]
+        context_features,
+        n_dim * 2,
+        hidden_units=hidden_units,
+        # Input features are unbounded
+        first_layer_nonlinear=True,
     )
     return ConditionalDiagonalNormal(shape=[n_dim], context_encoder=context_encoder)
 
@@ -235,41 +247,59 @@ def diagonal_normal(n_dim: int) -> Distribution:
     return ConditionalDiagonalNormal(shape=[n_dim])
 
 
-def cond_diagonal_normal(n_dim: int, dropout_prob=0.0) -> Distribution:
-    context_encoder = ConvEncoder(
-        context_features=n_dim * 2,
-        channels_multiplier=16,
-        dropout_probability=dropout_prob,
+def cond_diagonal_normal(n_dim: int, context_features: int, n_hidden=3) -> Distribution:
+    # Number of hidden layers for context encoder
+    if n_hidden:
+        hidden_units = [context_features] * (n_hidden - 1)
+    else:
+        hidden_units = []
+
+    context_encoder = MLP(
+        context_features,
+        n_dim * 2,
+        hidden_units=hidden_units,
+        # Input features are unbounded
+        first_layer_nonlinear=True,
     )
+
     return ConditionalDiagonalNormal(shape=[n_dim], context_encoder=context_encoder)
 
 
-def cond_langevin_diagonal_normal(
-    n_dim: int, s: int, t: int, eps: float, dropout_prob=0.0
-) -> Distribution:
-    context_encoder = ConvEncoder(
-        context_features=n_dim * 2,
-        channels_multiplier=16,
-        dropout_probability=dropout_prob,
-    )
-    return ConditionalLangevinDiagonalNormal(
-        shape=[n_dim], s=s, t=t, eps=eps, context_encoder=context_encoder
-    )
+# def cond_langevin_diagonal_normal(
+#     n_dim: int, s: int, t: int, eps: float, dropout_prob=0.0
+# ) -> Distribution:
+#     context_encoder = ConvEncoder(
+#         context_features=n_dim * 2,
+#         channels_multiplier=16,
+#         dropout_probability=dropout_prob,
+#     )
+#     return ConditionalLangevinDiagonalNormal(
+#         shape=[n_dim], s=s, t=t, eps=eps, context_encoder=context_encoder
+#     )
 
 
 def cond_flow(
-    n_dim: int, flow_type: str, n_flow_steps=10, n_flow_hidden=128, dropout_prob=0.0
+    n_dim: int,
+    flow_type: str,
+    cond_base=True,
+    n_flow_steps=10,
+    n_flow_hidden=128,
+    dropout_prob=0.0,
 ) -> Distribution:
     create_flow = create_flow_dict[flow_type]
 
     context_features = n_dim * 2
 
-    # To map context features into parameters for gaussian base dist
-    context_encoder = nn.Linear(context_features, n_dim * 2)
+    if cond_base:
+        # To map context features into parameters for gaussian base dist
+        # FIXME Apply non-linearity first?
+        context_encoder = nn.Linear(context_features, n_dim * 2)
 
-    base_dist = ConditionalDiagonalNormal(
-        shape=[n_dim], context_encoder=context_encoder
-    )
+        base_dist = ConditionalDiagonalNormal(
+            shape=[n_dim], context_encoder=context_encoder
+        )
+    else:
+        base_dist = StandardNormal((n_dim,))
 
     transform = transforms.CompositeTransform(
         [
@@ -369,6 +399,66 @@ class ConditionalCategorical(Distribution):
         logits = self._compute_params(context)
 
         return torch.argmax(logits, dim=-1)
+
+
+class ConditionalOneHotCategorical(Distribution):
+    def __init__(self, shape, context_encoder=None):
+        """Constructor.
+        Args:
+            shape: list, tuple or torch.Size, the shape of the input variables.
+            context_encoder: callable or None, encodes the context to the distribution parameters.
+                If None, defaults to the identity function.
+        """
+        super().__init__()
+
+        self._shape = torch.Size(shape)
+
+        if context_encoder is None:
+            self._context_encoder = lambda x: x
+        else:
+            self._context_encoder = context_encoder
+
+    def _compute_params(self, context):
+        """Compute the logits from context."""
+        if context is None:
+            raise ValueError("Context can't be None.")
+
+        logits = self._context_encoder(context)
+        if logits.shape[0] != context.shape[0]:
+            raise RuntimeError(
+                "The batch dimension of the parameters is inconsistent with the input."
+            )
+
+        return logits
+
+    def _log_prob(self, inputs, context):
+        # `inputs` should be a batch of labels, [B,]
+
+        # Compute parameters.
+        logits = self._compute_params(context)
+        assert logits.shape[0] == inputs.shape[0]
+
+        # FIXME Do I have to sum here?
+        # [B]
+        return OneHotCategorical(logits).log_prob(inputs).sum(-1)
+
+    def _sample(self, num_samples, context):
+        # Compute parameters.
+        logits = self._compute_params(context)
+
+        # One-hot vectors
+        samples = OneHotCategorical(logits).sample(torch.Size([num_samples]))
+
+        return samples.permute(1, 0)  # [B, K]
+
+    def _mean(self, context):
+        # FIXME
+        # Return most probable class
+        logits = self._compute_params(context)
+
+        # Probability vectors
+        return OneHotCategorical(logits).mean
+        # return torch.argmax(logits, dim=-1)
 
 
 def cond_inpt_bernoulli(

@@ -5,7 +5,6 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.core.lightning import LightningModule
 from src.callbacks import LatentDimInterpolator, VAEImageSampler
 from src.models.vaes import VAE
-from src.objectives import log_prob_lower_bound
 from src.utils import ConfigManager
 
 
@@ -89,7 +88,10 @@ class VAE_Experiment(LightningModule):
         kl_multiplier_initial = self.hparams["kl_multiplier_initial"]
         kl_multiplier_max = self.hparams["kl_multiplier_max"]
 
-        multiplier = min(self.global_step / (self.max_steps * kl_warmup_fraction), 1.0,)
+        multiplier = min(
+            self.global_step / (self.max_steps * kl_warmup_fraction),
+            1.0,
+        )
 
         return (
             kl_multiplier_initial
@@ -97,8 +99,12 @@ class VAE_Experiment(LightningModule):
         )
 
     def _run_step(self, batch):
-        x, _ = batch
-        elbo = self.obj(self.model, x, kl_multiplier=self._kl_multiplier())
+        elbo = self.obj(
+            self.model,
+            batch["data"],
+            self.likelihood_weights,
+            kl_multiplier=self._kl_multiplier(),
+        )
 
         return elbo.mean()
 
@@ -117,11 +123,20 @@ class VAE_Experiment(LightningModule):
 
         self.log_dict({"val_elbo": elbo})
 
-    def test_step(self, batch, batch_idx):
-        elbo = self._run_step(batch)
-        log_prob = log_prob_lower_bound(self.model, batch[0], num_samples=1000).mean()
 
-        self.log_dict({"test_elbo": elbo, "test_log_prob": log_prob})
+    def test_step(self, batch, batch_idx):
+        num_samples = 1000
+
+        # Get joint log prob (using importance sampling)
+        elbo = stochastic_elbo(
+            self.model, batch["data"], num_samples=num_samples, keepdim=True
+        )
+        log_prob = (
+            torch.logsumexp(elbo, dim=1)
+            - torch.log(torch.Tensor([num_samples]).to(self.device))
+        ).mean()
+
+        self.log_dict({"test_log_prob": log_prob})
 
     def configure_optimizers(self):
         # scheduler = {

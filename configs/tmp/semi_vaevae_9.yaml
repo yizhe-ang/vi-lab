@@ -1,0 +1,97 @@
+name: semi_vaevae_9
+
+seed: 0
+experiment: Fusion_MVAE_Experiment
+# Change here
+max_epochs: 50
+latent_dim: 20
+
+# DATA #########################################################################
+datamodule: datamodules.MNIST_SVHN_DataModule
+datamodule_args:
+  data_dir: data
+  batch_size: 256
+  val_split: 50_000
+  paired_prop: 0.3
+  # resize: True
+
+# OBJECTIVE ####################################################################
+objective: vaevae_elbo
+
+# ARCHITECTURES ################################################################
+prior: models.standard_normal
+# prior: models.standard_flow
+prior_args:
+  # flow_type: affine_coupling
+  # n_flow_steps: 5
+  # n_flow_hidden: 40
+
+approx_posterior: models.diagonal_normal
+# approx_posterior: models.cond_flow
+approx_posterior_args:
+  # flow_type: affine_coupling
+  # n_flow_steps: 5
+  # n_flow_hidden: 40
+  # cond_base: True
+
+encoder:
+  - models.MNISTEncoder1
+  - models.SVHNEncoder
+  # - models.ResNetEncoder
+  # - models.ResNetEncoder
+encoder_args:
+  # - width: 32
+  #   image_channels: 1
+  #   enc_config: 32x1,32d2,16x1,16d2,8x1,8d2,4x1
+  # - width: 32
+  #   image_channels: 3
+  #   enc_config: 32x1,32d2,16x1,16d2,8x1,8d2,4x1
+
+fusion_module: models.SetTransformer
+# fusion_module: models.PoE_Encoder
+fusion_module_args:
+  input_size: 40
+  output_size: 40
+  hidden_size: 80
+  # n_enc_layers: 4
+  # n_dec_layers: 4
+  n_hidden_layers: 3
+  n_heads: 4
+  modality_embeddings: False
+  ln: False
+  # hidden_units: [40]
+
+likelihood:
+  - models.ConditionalIndependentBernoulli
+  - models.ConditionalIndependentBernoulli
+likelihood_args:
+
+decoder:
+  - models.MNISTDecoder1
+  - models.SVHNDecoder
+  # - models.ResNetDecoder
+  # - models.ResNetDecoder
+decoder_args:
+  # - width: 32
+  #   image_channels: 1
+  #   dec_config: 4x1,8m4,8x1,16m8,16x1,32m16,32x1
+  # - width: 32
+  #   image_channels: 3
+  #   dec_config: 4x1,8m4,8x1,16m8,16x1,32m16,32x1
+
+# TRAINING PARAMETERS ##########################################################
+optimizer: optim.Adam
+optimizer_args:
+  lr: 0.0003
+
+# gradient_skip_thresh: 10000
+gradient_skip_thresh: -1
+# gradient_clip: 200.0
+gradient_clip: 100_000
+
+# To tune
+kl_warmup_fraction: 0.3
+kl_multiplier_initial: 1
+kl_multiplier_max: 1
+
+earlystop_patience: 5

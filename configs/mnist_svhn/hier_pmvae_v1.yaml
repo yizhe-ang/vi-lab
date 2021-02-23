@@ -1,4 +1,4 @@
-name: hier_pmvae_v1_3
+name: hier_pmvae_v1_24
 seed: 0
 
 experiment: HierPMVAE_v1_Experiment
@@ -8,7 +8,7 @@ max_epochs: 50
 m_latent_dim: 4
 s_latent_dim: 16
 
-objective: hier_pmvaevae_elbo
+objective: vaevae_elbo
 
 datamodule: datamodules.MNIST_SVHN_DataModule
 datamodule_args:
@@ -16,53 +16,70 @@ datamodule_args:
   batch_size: 256
   val_split: 50_000
 
-s_prior: models.standard_flow
+# s_prior: models.standard_flow
+s_prior: models.standard_normal
 s_prior_args:
-  flow_type: affine_coupling
-  n_flow_steps: 5
-  n_flow_hidden: 20
+  # flow_type: affine_coupling
+  # n_flow_steps: 5
+  # n_flow_hidden: 20
 
 m_priors:
-  - models.standard_cond_flow
-  - models.standard_cond_flow
+  # - models.cond_standard_flow
+  # - models.cond_standard_flow
+  - models.cond_normal
+  - models.cond_normal
 m_priors_args:
-  - flow_type: affine_coupling
-    cond_base: True
-    n_flow_steps: 5
-    n_flow_hidden: 20
-  - flow_type: affine_coupling
-    cond_base: True
-    n_flow_steps: 5
-    n_flow_hidden: 20
+  # - flow_type: affine_coupling
+  #   cond_base: True
+  #   n_flow_steps: 5
+  #   n_flow_hidden: 20
+  # - flow_type: affine_coupling
+  #   cond_base: True
+  #   n_flow_steps: 5
+  #   n_flow_hidden: 20
 
 s_posterior: models.diagonal_normal
 s_posterior_args:
 
-m_posteriors: [models.diagonal_normal, models.diagonal_normal]
+m_posteriors:
+  - models.cond_diagonal_normal
+  - models.cond_diagonal_normal
 m_posteriors_args:
 
-encoders: [models.PartitionedMNISTEncoder, models.PartitionedSVHNEncoder]
+encoders:
+  - models.PartitionedMNISTEncoder
+  - models.PartitionedSVHNEncoder
 encoders_args:
 
-fusion_module: models.SetEncoder
+fusion_module: models.PoE_Encoder
 fusion_module_args:
+  # input_size: 32
+  # output_size: 32
+  # hidden_units: [32]
 
-likelihoods: [
-  models.ConditionalIndependentBernoulli,
-  models.ConditionalIndependentBernoulli
-]
+likelihoods:
+  - models.ConditionalIndependentBernoulli
+  - models.ConditionalIndependentBernoulli
 likelihoods_args:
 
-decoders: [models.MNISTDecoder1, models.SVHNDecoder]
+decoders:
+  - models.MNISTDecoder1
+  - models.SVHNDecoder
 decoders_args:
 
 optimizer: optim.Adam
 optimizer_args:
+  # To tune learning rate?
   lr: 0.0003
+
+# gradient_skip_thresh: 10000
+gradient_skip_thresh: -1
+# gradient_clip: 200.0
+gradient_clip: 100_000
 
 # To tune
 kl_warmup_fraction: 0.3
-kl_multiplier_initial: 1
+kl_multiplier_initial: 0
 kl_multiplier_max: 1
 
 earlystop_patience: 5

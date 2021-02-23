@@ -1,4 +1,4 @@
-name: pmvae_2
+name: pmvae_0
 seed: 0
 
 experiment: PMVAE_Experiment
@@ -8,7 +8,7 @@ max_epochs: 50
 m_latent_dim: 4
 s_latent_dim: 16
 
-objective: pmvaevae_elbo
+objective: vaevae_elbo
 
 datamodule: datamodules.MNIST_SVHN_DataModule
 datamodule_args:
@@ -16,20 +16,13 @@ datamodule_args:
   batch_size: 256
   val_split: 50_000
 
-s_prior: models.standard_flow
+s_prior: models.standard_normal
 s_prior_args:
-  flow_type: affine_coupling
-  n_flow_steps: 5
-  n_flow_hidden: 20
 
-m_priors: [models.standard_flow, models.standard_flow]
+m_priors:
+  - models.standard_normal
+  - models.standard_normal
 m_priors_args:
-  - flow_type: affine_coupling
-    n_flow_steps: 5
-    n_flow_hidden: 20
-  - flow_type: affine_coupling
-    n_flow_steps: 5
-    n_flow_hidden: 20
 
 s_posterior: models.diagonal_normal
 s_posterior_args:
@@ -55,6 +48,8 @@ decoders_args:
 optimizer: optim.Adam
 optimizer_args:
   lr: 0.0003
+
+gradient_clip_val: 0.0
 
 # To tune
 kl_warmup_fraction: 0.3

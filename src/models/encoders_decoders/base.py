@@ -16,8 +16,10 @@ from src.models.base import Swish
 
 __all__ = [
     "MNISTEncoder1",
+    "DeepMNISTEncoder",
     "MNISTDecoder1",
     "SVHNEncoder",
+    "DeepSVHNEncoder",
     "SVHNDecoder",
     "PartitionedMNISTEncoder",
     "PartitionedSVHNEncoder",
@@ -61,6 +63,33 @@ class MNISTEncoder1(nn.Module):
     def forward(self, x):
         h = self.swish(self.fc1(x.view(-1, 784)))
         h = self.swish(self.fc2(h))
+
+        mean = self.fc31(h)
+        log_std = self.fc32(h)
+
+        # [B, latent_dim * 2]
+        return torch.cat([mean, log_std], dim=-1)
+
+
+class DeepMNISTEncoder(nn.Module):
+    """Deeper MNIST encoder with one hidden layer, from MVAE paper"""
+
+    def __init__(self, latent_dim: int) -> None:
+        super().__init__()
+        self.enc = nn.Sequential(
+            nn.Linear(784, 512),
+            Swish(),
+            nn.Linear(512, 512),
+            Swish(),
+            nn.Linear(512, 512),
+            Swish(),
+        )
+
+        self.fc31 = nn.Linear(512, latent_dim)
+        self.fc32 = nn.Linear(512, latent_dim)
+
+    def forward(self, x):
+        h = self.enc(x.view(-1, 784))
 
         mean = self.fc31(h)
         log_std = self.fc32(h)
@@ -179,6 +208,40 @@ class SVHNEncoder(nn.Module):
         return torch.cat([mean, log_std], dim=-1)
 
 
+class DeepSVHNEncoder(nn.Module):
+    def __init__(self, latent_dim):
+        super().__init__()
+
+        n_filters = 32
+
+        self.enc = nn.Sequential(
+            # input size: 3 x 32 x 32
+            nn.Conv2d(3, n_filters, 4, 2, 1, bias=True),
+            nn.ReLU(True),
+            # size: (fBase) x 16 x 16
+            nn.Conv2d(n_filters, n_filters * 2, 4, 2, 1, bias=True),
+            nn.ReLU(True),
+            # size: (fBase) x 16 x 16
+            nn.Conv2d(n_filters * 2, n_filters * 2, 4, 1, 2, bias=True),
+            nn.ReLU(True),
+            # size: (fBase * 2) x 8 x 8
+            nn.Conv2d(n_filters * 2, n_filters * 4, 4, 2, 1, bias=True),
+            nn.ReLU(True),
+            # size: (fBase * 4) x 4 x 4
+        )
+        self.c1 = nn.Conv2d(n_filters * 4, latent_dim, 4, 1, 0, bias=True)
+        self.c2 = nn.Conv2d(n_filters * 4, latent_dim, 4, 1, 0, bias=True)
+        # c1, c2 size: latent_dim x 1 x 1
+
+    def forward(self, x):
+        e = self.enc(x)
+        mean = self.c1(e).squeeze()
+        log_std = self.c2(e).squeeze()
+
+        # [B, latent_dim * 2]
+        return torch.cat([mean, log_std], dim=-1)
+
+
 class SVHNDecoder(nn.Module):
     """ Generate a SVHN image given a sample from the latent space. """
 
@@ -236,9 +299,11 @@ class PartitionedMNISTEncoder(nn.Module):
         h = self.swish(self.fc1(x.view(-1, 784)))
         h = self.swish(self.fc2(h))
 
+        # Modality-specific hidden vector
         m_mean = self.fc31(h)
         m_log_std = self.fc32(h)
 
+        # Modality-invariant hidden vector
         s_mean = self.fc41(h)
         s_log_std = self.fc42(h)
 
@@ -247,6 +312,53 @@ class PartitionedMNISTEncoder(nn.Module):
             "m": torch.cat([m_mean, m_log_std], dim=-1),
             "s": torch.cat([s_mean, s_log_std], dim=-1),
         }
+
+
+class PartitionedMNISTEncoderV2(nn.Module):
+    def __init__(self, m_latent_dim: int, s_latent_dim: int):
+        """MNIST encoder with partitioned latent space
+
+        Deeper layers for modality-invariant latent vector
+
+        Parameters
+        ----------
+        m_latent_dim : int
+            Size of modality-specific latent space
+        s_latent_dim : int
+            Size of modality-invariant (shared) latent space
+        """
+        super().__init__()
+        # Encoding network
+        self.fc1 = nn.Linear(784, 512)
+        self.fc2 = nn.Linear(512, 512)
+
+        # Additional two processing layers
+        self.fc3 = nn.Linear(512, 256)
+        self.fc4 = nn.Linear(256, 256)
+
+        # Parameters for modality-specific latent
+        self.fc_m = nn.Linear(512, m_latent_dim * 2)
+
+        # Parameters for modality-invariant latent
+        self.fc_s = nn.Linear(256, s_latent_dim * 2)
+
+        self.swish = Swish()
+
+    def forward(self, x):
+        h = self.swish(self.fc1(x.view(-1, 784)))
+        h = self.swish(self.fc2(h))
+
+        # Modality-specific hidden vector
+        m_feature = self.fc_m(h)
+
+        h = self.swish(self.fc3(h))
+        h = self.swish(self.fc4(h))
+
+        # Modality-invariant hidden vector
+        s_feature = self.fc_s(h)
+
+        # [B, latent_dim * 2]
+        return {"m": m_feature, "s": s_feature}
 
 
 class PartitionedSVHNEncoder(nn.Module):
@@ -298,3 +410,57 @@ class PartitionedSVHNEncoder(nn.Module):
             "s": torch.cat([s_mean, s_log_std], dim=-1),
         }
 
+
+class PartitionedSVHNEncoderV2(nn.Module):
+    def __init__(self, m_latent_dim: int, s_latent_dim: int):
+        """SVHN encoder with partitioned latent space
+
+        Deeper layers for modality-invariant latent vector
+
+        Parameters
+        ----------
+        m_latent_dim : int
+            Size of modality-specific latent space
+        s_latent_dim : int
+            Size of modality-invariant (shared) latent space
+        """
+        super().__init__()
+
+        n_filters = 32
+
+        self.enc_1 = nn.Sequential(
+            # input size: 3 x 32 x 32
+            nn.Conv2d(3, n_filters, 4, 2, 1, bias=True),
+            nn.ReLU(True),
+            # size: (fBase) x 16 x 16
+            nn.Conv2d(n_filters, n_filters * 2, 4, 2, 1, bias=True),
+            nn.ReLU(True),
+            # size: (fBase * 2) x 8 x 8
+            nn.Conv2d(n_filters * 2, n_filters * 4, 4, 2, 1, bias=True),
+            nn.ReLU(True),
+            # size: (fBase * 4) x 4 x 4
+        )
+
+        self.enc_2 = nn.Sequential(
+            nn.Linear(2048, 1024),
+            nn.ReLU(True),
+            nn.Linear(1024, 512),
+            nn.ReLU(True),
+        )
+
+        self.c_m = nn.Linear(2048, m_latent_dim * 2)
+
+        self.c_s = nn.Linear(512, s_latent_dim * 2)
+
+    def forward(self, x):
+        e = self.enc_1(x)
+        e = e.view(e.shape[0], -1)
+
+        m_feature = self.c_m(e)
+
+        e = self.enc_2(e)
+
+        s_feature = self.c_s(e)
+
+        # [B, latent_dim * 2]
+        return {"m": m_feature, "s": s_feature}

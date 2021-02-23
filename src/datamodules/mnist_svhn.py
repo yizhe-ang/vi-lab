@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 import torch
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset, random_split
@@ -8,8 +9,17 @@ from torchvision.datasets import MNIST, SVHN
 
 
 class MNIST_SVHN(Dataset):
-    def __init__(self, data_dir, train=True, download=False, transform=None):
+    def __init__(
+        self,
+        data_dir,
+        train=True,
+        download=False,
+        transform=None,
+        paired_prop=1.0,
+        resize=False,
+    ):
         super().__init__()
+        self.resize = transform_lib.Resize(32) if resize else None
 
         self.mnist = MNIST(
             data_dir, train=train, download=download, transform=transform
@@ -26,16 +36,29 @@ class MNIST_SVHN(Dataset):
             len(self.indices_mnist), len(self.indices_svhn)
         )
 
+        self.dataset_len = len(self.indices_mnist)
+
+        # Create boolean tensor of data points that are to be paired
+        self.paired = torch.rand(self.dataset_len) <= paired_prop
+
     def __len__(self):
-        return len(self.indices_mnist)
+        return self.dataset_len
 
     def __getitem__(self, idx):
         idx1, idx2 = self.indices_mnist[idx], self.indices_svhn[idx]
         assert self.mnist[idx1][1] == self.svhn[idx2][1], "Something evil has happened!"
 
-        return dict(
-            data=[self.mnist[idx1][0], self.svhn[idx2][0]], label=self.svhn[idx2][1]
-        )
+        mnist = self.mnist[idx1][0]
+        if self.resize:
+            mnist = self.resize(mnist)
+
+        svhn = self.svhn[idx2][0]
+        label = self.svhn[idx2][1]
+
+        # Whether this data point is to be paired
+        paired = self.paired[idx]
+
+        return {"data": [mnist, svhn], "label": label, "paired": paired}
 
 
 class MNIST_SVHN_DataModule(LightningDataModule):
@@ -52,6 +75,8 @@ class MNIST_SVHN_DataModule(LightningDataModule):
         val_split: int = 50_000,
         num_workers: int = 16,
         seed: int = 42,
+        paired_prop=1.0,
+        resize=False,
     ):
         super().__init__()
         self.data_dir = data_dir
@@ -59,6 +84,8 @@ class MNIST_SVHN_DataModule(LightningDataModule):
         self.val_split = val_split
         self.num_workers = num_workers
         self.seed = seed
+        self.paired_prop = paired_prop
+        self.resize = resize
 
         # Number of class labels for each modality
         self.n_classes = 10
@@ -66,12 +93,18 @@ class MNIST_SVHN_DataModule(LightningDataModule):
 
     def prepare_data(self):
         # Download
-        MNIST_SVHN(self.data_dir, train=True, download=True)
-        MNIST_SVHN(self.data_dir, train=False, download=True)
+        MNIST_SVHN(self.data_dir, train=True, download=True, resize=self.resize)
+        MNIST_SVHN(self.data_dir, train=False, download=True, resize=self.resize)
 
     def setup(self, stage=None):
         if stage == "fit" or stage is None:
-            dataset = MNIST_SVHN(self.data_dir, train=True, transform=self.transform)
+            dataset = MNIST_SVHN(
+                self.data_dir,
+                train=True,
+                transform=self.transform,
+                paired_prop=self.paired_prop,
+                resize=self.resize,
+            )
             self.train_set, self.val_set = random_split(
                 dataset,
                 [len(dataset) - self.val_split, self.val_split],
@@ -79,17 +112,20 @@ class MNIST_SVHN_DataModule(LightningDataModule):
             )
 
             # Infer dimension of dataset
-            self.dims = [
-                tuple(modality.shape) for modality in self.train_set[0]["data"]
-            ]
+            self.dims = [tuple(modality.shape) for modality in self.val_set[0]["data"]]
 
         if stage == "test" or stage is None:
             self.test_set = MNIST_SVHN(
-                self.data_dir, train=False, transform=self.transform
+                self.data_dir, train=False, transform=self.transform, resize=self.resize
             )
 
             # Infer dimension of dataset
             self.dims = [tuple(modality.shape) for modality in self.test_set[0]["data"]]
+
+        self.likelihood_weights = (
+            np.prod(self.dims[1]) / np.prod(self.dims[0]),
+            1.0,
+        )
 
     def train_dataloader(self):
         return DataLoader(
