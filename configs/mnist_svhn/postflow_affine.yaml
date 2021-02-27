@@ -1,0 +1,49 @@
+name: vaevae_set_postflow_affine_0
+seed: 0
+
+experiment: Fusion_MVAE_Experiment
+
+max_epochs: 50
+min_epochs: 50
+
+latent_dim: 20
+objective: vaevae_elbo
+
+datamodule: MNIST_SVHN_DataModule
+datamodule_args:
+  data_dir: data
+  batch_size: 256
+  val_split: 50_000
+
+prior: standard_normal
+prior_args: {}
+
+approx_posterior: cond_flow
+approx_posterior_args:
+  flow_type: affine_coupling
+  n_flow_steps: 5
+  n_flow_hidden: 40
+
+encoder: [MNISTEncoder1, SVHNEncoder]
+encoder_args: [{}, {}]
+
+fusion_module: SetEncoder
+fusion_module_args: {}
+
+likelihood: [ConditionalIndependentBernoulli, ConditionalIndependentBernoulli]
+likelihood_args: [{}, {}]
+
+decoder: [MNISTDecoder1, SVHNDecoder]
+decoder_args: [{}, {}]
+
+optimizer: Adam
+# To tune
+learning_rate: 0.0003
+optimizer_args: {}
+
+# To tune
+kl_warmup_fraction: 0.3
+kl_multiplier_initial: 1
+kl_multiplier_max: 1
+
+earlystop_patience: 5

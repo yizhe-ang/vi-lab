@@ -1,5 +1,5 @@
 pyyaml
 numpy
-scipy
 pytorch-lightning
 wandb
+git+https://github.com/bayesiains/nflows.git

@@ -1,5 +1,67 @@
 import numpy as np
 import torch
+import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
+
+
+def plot_tsne(z_loc: torch.Tensor, classes: torch.Tensor):
+    """
+    Parameters
+    ----------
+    z_loc : torch.Tensor
+        [B, Z]
+    classes : torch.Tensor
+        [B]
+
+    Returns
+    -------
+    [type]
+        Matplotlib fig
+    """
+    model_tsne = TSNE(n_components=2, random_state=0)
+    z_states = z_loc.detach().cpu().numpy()
+    z_embed = model_tsne.fit_transform(z_states)
+    classes = classes.detach().cpu().numpy()
+
+    fig = plt.figure(figsize=(5, 5))
+    for ic in range(10):
+        ind_class = classes == ic
+        color = plt.cm.Set3(ic)
+
+        plt.scatter(z_embed[ind_class, 0], z_embed[ind_class, 1], s=10, color=color)
+        # plt.title(title)
+
+    return fig
+
+def plot_pca(z_loc: torch.Tensor, classes: torch.Tensor):
+    """
+    Parameters
+    ----------
+    z_loc : torch.Tensor
+        [B, Z]
+    classes : torch.Tensor
+        [B]
+
+    Returns
+    -------
+    [type]
+        Matplotlib fig
+    """
+    model_pca = PCA(n_components=2, random_state=0)
+    z_states = z_loc.detach().cpu().numpy()
+    z_embed = model_pca.fit_transform(z_states)
+    classes = classes.detach().cpu().numpy()
+
+    fig = plt.figure(figsize=(5, 5))
+    for ic in range(10):
+        ind_class = classes == ic
+        color = plt.cm.Set3(ic)
+
+        plt.scatter(z_embed[ind_class, 0], z_embed[ind_class, 1], s=10, color=color)
+        # plt.title(title)
+
+    return fig
 
 
 def plot_distribution(

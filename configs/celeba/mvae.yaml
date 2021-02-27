@@ -1,0 +1,80 @@
+name: mvae_postflow_0
+
+seed: 0
+experiment: Celeba_MVAE_Experiment
+# Change here
+max_epochs: 150
+latent_dim: 32
+
+# DATA #########################################################################
+datamodule: datamodules.CelebaDataModule
+datamodule_args:
+  data_dir: data
+  batch_size: 256
+  paired_prop: 1.0
+  num_workers: 8
+
+# OBJECTIVE ####################################################################
+objective: vaevae_elbo
+
+# ARCHITECTURES ################################################################
+# prior: models.standard_normal
+prior: models.standard_flow
+prior_args:
+  flow_type: affine_coupling
+  n_flow_steps: 5
+  n_flow_hidden: 128
+
+approx_posterior: models.diagonal_normal
+# approx_posterior: models.cond_flow
+approx_posterior_args:
+  # flow_type: affine_coupling
+  # n_flow_steps: 5
+  # n_flow_hidden: 128
+  # cond_base: True
+
+encoder:
+  - models.CelebaImgEncoder
+  - models.CelebaTextEncoder
+encoder_args:
+
+fusion_module: models.SetTransformer
+# fusion_module: models.PoE_Encoder
+fusion_module_args:
+  input_size: 64
+  output_size: 64
+  hidden_size: 128
+  # n_enc_layers: 4
+  # n_dec_layers: 4
+  n_hidden_layers: 6
+  n_heads: 8
+  modality_embeddings: False
+  ln: False
+  # hidden_units: [40]
+
+likelihood:
+  - models.ConditionalIndependentBernoulli
+  - models.ConditionalOneHotCategorical
+likelihood_args:
+
+decoder:
+  - models.CelebaImgDecoder
+  - models.CelebaTextDecoder
+decoder_args:
+
+# TRAINING PARAMETERS ##########################################################
+optimizer: optim.Adam
+optimizer_args:
+  lr: 0.0001
+
+# gradient_skip_thresh: 10000
+gradient_skip_thresh: -1
+# gradient_clip: 200.0
+gradient_clip: 10_000_000
+
+# To tune
+kl_warmup_fraction: 0.3
+kl_multiplier_initial: 1
+kl_multiplier_max: 1
+
+earlystop_patience: 5

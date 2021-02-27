@@ -1,0 +1,61 @@
+name: hier_pmvae_v2_0
+seed: 0
+
+experiment: HierPMVAE_v2_Experiment
+
+max_epochs: 50
+
+m_latent_dim: 20
+s_latent_dim: 20
+
+objective: hier_pmvaevae_v2_elbo
+
+datamodule: datamodules.MNIST_SVHN_DataModule
+datamodule_args:
+  data_dir: data
+  batch_size: 256
+  val_split: 50_000
+
+s_prior: models.standard_normal
+s_prior_args:
+
+m_priors: [models.standard_cond_flow, models.standard_cond_flow]
+m_priors_args:
+  - flow_type: affine_coupling
+    n_flow_steps: 5
+    n_flow_hidden: 20
+  - flow_type: affine_coupling
+    n_flow_steps: 5
+    n_flow_hidden: 20
+
+s_posterior: models.diagonal_normal
+s_posterior_args:
+
+m_posteriors: [models.diagonal_normal, models.diagonal_normal]
+m_posteriors_args:
+
+encoders: [models.PartitionedMNISTEncoder, models.PartitionedSVHNEncoder]
+encoders_args:
+
+fusion_module: models.SetEncoder
+fusion_module_args:
+
+likelihoods: [
+  models.ConditionalIndependentBernoulli,
+  models.ConditionalIndependentBernoulli
+]
+likelihoods_args:
+
+decoders: [models.MNISTDecoder1, models.SVHNDecoder]
+decoders_args:
+
+optimizer: optim.Adam
+optimizer_args:
+  lr: 0.0003
+
+# To tune
+kl_warmup_fraction: 0.3
+kl_multiplier_initial: 1
+kl_multiplier_max: 1
+
+earlystop_patience: 5

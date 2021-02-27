@@ -1,0 +1,53 @@
+name: vaevae_priorflow_0
+seed: 0
+
+experiment: Fusion_MVAE_Experiment
+
+max_epochs: 51
+
+latent_dim: 20
+objective: vaevae_elbo
+
+datamodule: datamodules.MNIST_SVHN_DataModule
+datamodule_args:
+  data_dir: data
+  batch_size: 256
+  val_split: 50_000
+
+prior: models.standard_flow
+prior_args:
+  flow_type: affine_coupling
+  n_flow_steps: 5
+  n_flow_hidden: 20
+
+approx_posterior: models.diagonal_normal
+approx_posterior_args:
+
+encoder:
+  - models.MNISTEncoder1
+  - models.SVHNEncoder
+encoder_args:
+
+fusion_module: models.SetEncoder
+fusion_module_args:
+
+likelihood:
+  - models.ConditionalIndependentBernoulli
+  - models.ConditionalIndependentBernoulli
+likelihood_args:
+
+decoder:
+  - models.MNISTDecoder1
+  - models.SVHNDecoder
+decoder_args:
+
+optimizer: optim.Adam
+optimizer_args:
+  lr: 0.0003
+
+# To tune
+kl_warmup_fraction: 0.3
+kl_multiplier_initial: 1
+kl_multiplier_max: 1
+
+earlystop_patience: 5
